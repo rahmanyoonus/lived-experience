@@ -1510,7 +1510,9 @@ describe("App capture integration", () => {
     ).toHaveValue("");
     expect(screen.queryByText("Saved")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "New Story" }),
+      within(screen.getByRole("main")).queryByRole("button", {
+        name: "New Story",
+      }),
     ).not.toBeInTheDocument();
   });
 
@@ -1545,7 +1547,9 @@ describe("App capture integration", () => {
       await screen.findByText(/could not be acknowledged by cloud saving/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "New Story" }),
+      within(screen.getByRole("main")).getByRole("button", {
+        name: "New Story",
+      }),
     ).toBeDisabled();
     expect((await persistence.recoverGuestDraft())?.story.current_text).toBe(
       text,
@@ -1570,7 +1574,9 @@ describe("App capture integration", () => {
       screen.queryByRole("button", { name: "Sync now" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "New Story" }),
+      within(screen.getByRole("main")).getByRole("button", {
+        name: "New Story",
+      }),
     ).toBeEnabled();
   });
 
@@ -1680,7 +1686,7 @@ describe("App capture integration", () => {
     );
 
     const editor = await screen.findByDisplayValue(text);
-    const newStory = await screen.findByRole("button", {
+    const newStory = await within(screen.getByRole("main")).findByRole("button", {
       name: "New Story",
     });
     await waitFor(() => expect(newStory).toBeEnabled());
@@ -1724,7 +1730,7 @@ describe("App capture integration", () => {
     );
 
     const visualise = await screen.findByRole("button", {
-      name: "Visualise my stories",
+      name: "Visualise My Stories",
     });
     await user.click(visualise);
 
@@ -1748,7 +1754,7 @@ describe("App capture integration", () => {
       await screen.findByRole("textbox", { name: "Write or edit your story" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Visualise my stories" }),
+      screen.getByRole("button", { name: "Visualise My Stories" }),
     ).toHaveFocus();
   });
 });

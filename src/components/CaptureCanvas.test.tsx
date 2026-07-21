@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -35,6 +41,7 @@ describe("CaptureCanvas", () => {
         name: "Welcome, Please start whenever you’re ready.",
       }),
     ).toBeInTheDocument();
+    expect(screen.queryByText("Ready when you are")).not.toBeInTheDocument();
     expect(
       screen.getByText(/speak or write in your own words/i),
     ).toBeInTheDocument();
@@ -128,7 +135,9 @@ describe("CaptureCanvas", () => {
     const recordingButton = screen.getByRole("button", {
       name: "Start recording",
     });
-    const newStoryButton = screen.getByRole("button", {
+    const captureActions = recordingButton.closest(".capture-actions");
+    expect(captureActions).not.toBeNull();
+    const newStoryButton = within(captureActions as HTMLElement).getByRole("button", {
       name: "New Story",
     });
 
@@ -426,10 +435,10 @@ describe("CaptureCanvas", () => {
     const { rerender } = render(<CaptureCanvas {...makeProps()} />);
 
     expect(
-      screen.queryByRole("button", { name: "Your stories" }),
+      screen.queryByRole("button", { name: "Your Stories" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Visualise my stories" }),
+      screen.queryByRole("button", { name: "Visualise My Stories" }),
     ).not.toBeInTheDocument();
 
     rerender(
@@ -442,16 +451,27 @@ describe("CaptureCanvas", () => {
       />,
     );
 
-    const helpButton = screen.getByRole("button", { name: "Help Me" });
-    const storiesButton = screen.getByRole("button", { name: "Your stories" });
-    expect(helpButton.compareDocumentPosition(storiesButton)).toBe(
+    const navigation = screen.getByRole("navigation", { name: "Main" });
+    const helpButton = within(navigation).getByRole("button", { name: "Help Me" });
+    const newStoryTab = within(navigation).getByText("New Story");
+    const storiesButton = within(navigation).getByRole("button", {
+      name: "Your Stories",
+    });
+    const visualiseButton = within(navigation).getByRole("button", {
+      name: "Visualise My Stories",
+    });
+    expect(newStoryTab.compareDocumentPosition(storiesButton)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    await user.click(screen.getByRole("button", { name: "Your stories" }));
-    expect(onOpenStories).toHaveBeenCalledOnce();
-    await user.click(
-      screen.getByRole("button", { name: "Visualise my stories" }),
+    expect(storiesButton.compareDocumentPosition(visualiseButton)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
     );
+    expect(visualiseButton.compareDocumentPosition(helpButton)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    await user.click(storiesButton);
+    expect(onOpenStories).toHaveBeenCalledOnce();
+    await user.click(visualiseButton);
     expect(onOpenStoryVisualisation).toHaveBeenCalledOnce();
   });
 

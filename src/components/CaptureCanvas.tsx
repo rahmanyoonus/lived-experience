@@ -142,8 +142,10 @@ const persistencePresentations: Record<PersistenceState, StatusPresentation> = {
   },
 };
 
-const phaseLabels: Record<Exclude<CapturePhase, "editing">, string> = {
-  empty: "Ready when you are",
+const phaseLabels: Record<
+  Exclude<CapturePhase, "editing" | "empty">,
+  string
+> = {
   recording: "Listening",
   processing: "Processing transcript",
   error: "Recording needs attention",
@@ -715,16 +717,37 @@ export function CaptureCanvas({
                 onClick={onStartNewStory}
                 type="button"
               >
-                New story
+                New Story
               </button>
             ) : (
               <span
                 aria-current="page"
                 className="navigation-tab navigation-tab--active"
               >
-                New story
+                New Story
               </span>
             )}
+            {isAuthenticated ? (
+              <>
+                <button
+                  className="navigation-tab"
+                  disabled={!onOpenStories}
+                  onClick={onOpenStories}
+                  type="button"
+                >
+                  Your Stories
+                </button>
+                <button
+                  className="navigation-tab"
+                  data-visualise-stories-trigger
+                  disabled={!onOpenStoryVisualisation}
+                  onClick={onOpenStoryVisualisation}
+                  type="button"
+                >
+                  Visualise My Stories
+                </button>
+              </>
+            ) : null}
             <button
               aria-controls="capture-help-cues"
               aria-expanded={showHelp}
@@ -736,27 +759,6 @@ export function CaptureCanvas({
               <span aria-hidden="true" className="help-toggle__mark">?</span>
               <span>Help Me</span>
             </button>
-            {isAuthenticated ? (
-              <>
-                <button
-                  className="navigation-tab"
-                  disabled={!onOpenStories}
-                  onClick={onOpenStories}
-                  type="button"
-                >
-                  Your stories
-                </button>
-                <button
-                  className="navigation-tab"
-                  data-visualise-stories-trigger
-                  disabled={!onOpenStoryVisualisation}
-                  onClick={onOpenStoryVisualisation}
-                  type="button"
-                >
-                  Visualise my stories
-                </button>
-              </>
-            ) : null}
           </nav>
           <div className="site-header__status">
             <PersistenceStatus
@@ -787,12 +789,7 @@ export function CaptureCanvas({
           {!isFlowMode && !hasStarted ? (
             <div className="capture-canvas__introduction">
               <h1 className="capture-heading" id="capture-heading">
-                <span className="capture-heading__line">
-                  Welcome, Please start
-                </span>{" "}
-                <span className="capture-heading__line">
-                  whenever you’re ready.
-                </span>
+                Welcome, Please start whenever you’re ready.
               </h1>
               <p className="capture-intro">
                 Speak or write in your own words. Everything stays private.
@@ -1125,7 +1122,7 @@ export function CaptureCanvas({
                       is saved before starting a new story.
                     </span>
                   ) : null}
-                  {phase !== "editing" ? (
+                  {phase !== "editing" && phase !== "empty" ? (
                     <div className="capture-state-row">
                       {isRecording ? <RecordingActivityWave /> : null}
                       <div

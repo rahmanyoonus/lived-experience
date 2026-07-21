@@ -302,7 +302,6 @@ button.navigation-tab:hover:not(:disabled) {
     background-color var(--duration-quick) var(--ease-out);
 }
 
-.help-toggle:hover,
 .help-toggle[aria-pressed="true"] {
   color: var(--on-accent);
   background: var(--accent);
@@ -423,8 +422,9 @@ button.navigation-tab:hover:not(:disabled) {
   line-height: var(--leading-tight);
 }
 
-.capture-heading {
+.capture-canvas__introduction .capture-heading {
   white-space: nowrap;
+  text-wrap: nowrap;
 }
 
 .capture-intro {
@@ -1256,13 +1256,8 @@ button.navigation-tab:hover:not(:disabled) {
     padding: var(--space-6) 0 var(--space-8);
   }
 
-  .capture-heading {
-    white-space: normal;
-  }
-
-  .capture-heading__line {
-    display: block;
-    white-space: nowrap;
+  .capture-canvas__introduction h1 {
+    font-size: clamp(0.9375rem, 4.6vw, 2.1rem);
   }
 
   .capture-layout--flow-mode {
