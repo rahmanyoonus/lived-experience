@@ -52,10 +52,8 @@ describe("CaptureCanvas", () => {
       screen.getByRole("button", { name: /Just listen\s*On/ }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
-      screen.getByRole("button", {
-        name: /Interview me\s*Not yet available/,
-      }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: /Interview me/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", {
         name: /Guide me with a prompt\s*Not yet available/,

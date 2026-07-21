@@ -321,7 +321,6 @@ function PersistenceStatus({
 }
 
 interface CaptureModeControlsProps {
-  onInterviewMe?: () => void;
   onRequestPrompt?: () => void;
   promptBusy: boolean;
   promptDisabled: boolean;
@@ -329,7 +328,6 @@ interface CaptureModeControlsProps {
 }
 
 function CaptureModeControls({
-  onInterviewMe,
   onRequestPrompt,
   promptBusy,
   promptDisabled,
@@ -348,21 +346,6 @@ function CaptureModeControls({
       >
         <span>Just listen</span>
         <span className="mode-control__meta">On</span>
-      </button>
-      <button
-        aria-describedby={!onInterviewMe ? "interview-unavailable" : undefined}
-        aria-pressed="false"
-        className="mode-control"
-        disabled={!onInterviewMe}
-        onClick={onInterviewMe}
-        type="button"
-      >
-        <span>Interview me</span>
-        {!onInterviewMe ? (
-          <span className="mode-control__meta" id="interview-unavailable">
-            Not yet available
-          </span>
-        ) : null}
       </button>
       <div className="help-anchor help-anchor--prompt help-anchor--right">
         <button
@@ -600,7 +583,6 @@ export function CaptureCanvas({
   onOpenOriginalAudio,
   onOpenOriginalTranscript,
   onOpenVersionHistory,
-  onInterviewMe,
   onRequestPrompt,
   onDismissPrompt,
 }: CaptureCanvasProps) {
@@ -827,7 +809,6 @@ export function CaptureCanvas({
           >
 
                 {!isFlowMode ? <CaptureModeControls
-                  onInterviewMe={onInterviewMe}
                   onRequestPrompt={onRequestPrompt}
                   promptBusy={guidancePromptState.status === "loading"}
                   promptDisabled={promptRequestDisabled}
