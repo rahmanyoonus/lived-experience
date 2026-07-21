@@ -518,11 +518,11 @@ export function CaptureCanvas({
         <section aria-labelledby="capture-heading" className="capture-canvas">
           {!hasStarted ? (
             <div className="capture-canvas__introduction">
-              <h1 id="capture-heading">Start whenever you’re ready.</h1>
+              <h1 id="capture-heading">
+                Welcome, Please start whenever you’re ready.
+              </h1>
               <p className="capture-intro">
-                Speak or write in your own words. Nothing needs to be finished
-                today. Everything stays private, saved only on this device until
-                you choose to keep it.
+                Speak or write in your own words. Everything stays private.
               </p>
               {canUseExampleText ? (
                 <div className="example-starter">
@@ -533,9 +533,6 @@ export function CaptureCanvas({
                   >
                     Use example text
                   </button>
-                  <span>
-                    Adds a fictional sample you can edit or replace.
-                  </span>
                 </div>
               ) : null}
             </div>
@@ -762,12 +759,6 @@ export function CaptureCanvas({
                     </div>
                   ) : null}
                 </div>
-
-                {!hasStarted ? (
-                  <p className="capture-reassurance">
-                    Nothing needs to be finished today.
-                  </p>
-                ) : null}
 
                 {onDiscardRecoveredDraft || onStartNewStory ? (
                   <div className="draft-lifecycle-actions">

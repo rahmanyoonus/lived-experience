@@ -31,7 +31,9 @@ describe("CaptureCanvas", () => {
     render(<CaptureCanvas {...makeProps()} />);
 
     expect(
-      screen.getByRole("heading", { name: "Start whenever you’re ready." }),
+      screen.getByRole("heading", {
+        name: "Welcome, Please start whenever you’re ready.",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/speak or write in your own words/i),
@@ -63,8 +65,26 @@ describe("CaptureCanvas", () => {
     );
 
     expect(
-      screen.getByText("Adds a fictional sample you can edit or replace."),
+      screen.getByRole("heading", {
+        name: "Welcome, Please start whenever you’re ready.",
+      }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Speak or write in your own words. Everything stays private.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Adds a fictional sample you can edit or replace."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Prompt guidance can use only the story currently open. Your other stories are not included.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Nothing needs to be finished today."),
+    ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Use example text" }),
     );

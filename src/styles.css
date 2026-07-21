@@ -389,6 +389,10 @@ button.navigation-tab:hover:not(:disabled) {
 
 .example-starter .text-action {
   flex: 0 0 auto;
+  min-height: 44px;
+  padding: 8px 0;
+  font-size: 1rem;
+  font-weight: var(--weight-semibold);
 }
 
 .capture-workspace {
@@ -652,14 +656,6 @@ button.navigation-tab:hover:not(:disabled) {
   color: var(--ink-3);
   font-size: 0.75rem;
   line-height: 1.4;
-}
-
-.capture-reassurance {
-  margin: 0;
-  color: var(--ink-3);
-  font-family: var(--font-story);
-  font-size: 1.0625rem;
-  font-style: italic;
 }
 
 .processing-note,
