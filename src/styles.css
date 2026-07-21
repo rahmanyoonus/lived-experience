@@ -375,6 +375,10 @@ button.navigation-tab:hover:not(:disabled) {
   line-height: var(--leading-tight);
 }
 
+.capture-heading {
+  white-space: nowrap;
+}
+
 .capture-intro {
   max-width: 52ch;
   margin: 0;
@@ -1101,6 +1105,15 @@ button.navigation-tab:hover:not(:disabled) {
   .capture-layout {
     width: min(100% - 40px, 680px);
     padding: var(--space-6) 0 var(--space-8);
+  }
+
+  .capture-heading {
+    white-space: normal;
+  }
+
+  .capture-heading__line {
+    display: block;
+    white-space: nowrap;
   }
 
   .capture-layout--flow-mode {

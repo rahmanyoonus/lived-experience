@@ -687,8 +687,13 @@ export function CaptureCanvas({
         >
           {!isFlowMode && !hasStarted ? (
             <div className="capture-canvas__introduction">
-              <h1 id="capture-heading">
-                Welcome, Please start whenever you’re ready.
+              <h1 className="capture-heading" id="capture-heading">
+                <span className="capture-heading__line">
+                  Welcome, Please start
+                </span>{" "}
+                <span className="capture-heading__line">
+                  whenever you’re ready.
+                </span>
               </h1>
               <p className="capture-intro">
                 Speak or write in your own words. Everything stays private.
