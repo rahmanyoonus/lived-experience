@@ -142,11 +142,10 @@ const persistencePresentations: Record<PersistenceState, StatusPresentation> = {
   },
 };
 
-const phaseLabels: Record<CapturePhase, string> = {
+const phaseLabels: Record<Exclude<CapturePhase, "editing">, string> = {
   empty: "Ready when you are",
   recording: "Listening",
   processing: "Processing transcript",
-  editing: "Ready to continue",
   error: "Recording needs attention",
 };
 
@@ -225,6 +224,43 @@ function MicrophoneIcon() {
   );
 }
 
+const editorHelpText = {
+  prompt: "Click here for story ideas and prompts to get you going.",
+  editor: "Type here. Dont worry about spelling and punctuations.",
+  recording:
+    "Click here to speak and record your memories. Transcripts are automatically generated for your review.",
+  flowMode: "Click here to hide all distractions.",
+} as const;
+
+function joinDescriptionIds(
+  ...ids: Array<string | false | null | undefined>
+): string | undefined {
+  const description = ids.filter(Boolean).join(" ");
+  return description || undefined;
+}
+
+function HelpCue({
+  id,
+  side,
+  text,
+}: {
+  id: string;
+  side: "left" | "right";
+  text: string;
+}) {
+  return (
+    <aside className="help-cue" data-side={side} id={id}>
+      {side === "right" ? (
+        <span aria-hidden="true" className="help-cue__arrow" />
+      ) : null}
+      <p className="help-cue__bubble">{text}</p>
+      {side === "left" ? (
+        <span aria-hidden="true" className="help-cue__arrow" />
+      ) : null}
+    </aside>
+  );
+}
+
 function PersistenceStatus({
   state,
   onSyncNow,
@@ -283,6 +319,7 @@ interface CaptureModeControlsProps {
   onRequestPrompt?: () => void;
   promptBusy: boolean;
   promptDisabled: boolean;
+  showHelp: boolean;
 }
 
 function CaptureModeControls({
@@ -290,6 +327,7 @@ function CaptureModeControls({
   onRequestPrompt,
   promptBusy,
   promptDisabled,
+  showHelp,
 }: CaptureModeControlsProps) {
   return (
     <div
@@ -320,21 +358,35 @@ function CaptureModeControls({
           </span>
         ) : null}
       </button>
-      <button
-        aria-busy={promptBusy}
-        aria-describedby={!onRequestPrompt ? "prompt-unavailable" : undefined}
-        className="mode-control"
-        disabled={!onRequestPrompt || promptBusy || promptDisabled}
-        onClick={onRequestPrompt}
-        type="button"
-      >
-        <span>{promptBusy ? "Finding a prompt…" : "Guide me with a prompt"}</span>
-        {!onRequestPrompt ? (
-          <span className="mode-control__meta" id="prompt-unavailable">
-            Not yet available
+      <div className="help-anchor help-anchor--prompt help-anchor--right">
+        <button
+          aria-busy={promptBusy}
+          aria-describedby={joinDescriptionIds(
+            !onRequestPrompt && "prompt-unavailable",
+            showHelp && "prompt-onboarding-help",
+          )}
+          className="mode-control"
+          disabled={!onRequestPrompt || promptBusy || promptDisabled}
+          onClick={onRequestPrompt}
+          type="button"
+        >
+          <span>
+            {promptBusy ? "Finding a prompt…" : "Guide me with a prompt"}
           </span>
+          {!onRequestPrompt ? (
+            <span className="mode-control__meta" id="prompt-unavailable">
+              Not yet available
+            </span>
+          ) : null}
+        </button>
+        {showHelp ? (
+          <HelpCue
+            id="prompt-onboarding-help"
+            side="right"
+            text={editorHelpText.prompt}
+          />
         ) : null}
-      </button>
+      </div>
     </div>
   );
 }
@@ -546,6 +598,7 @@ export function CaptureCanvas({
   onDismissPrompt,
 }: CaptureCanvasProps) {
   const [isFlowMode, setIsFlowMode] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const flowModeButtonRef = useRef<HTMLButtonElement>(null);
   const restoreFlowModeButtonFocusRef = useRef(false);
@@ -598,6 +651,39 @@ export function CaptureCanvas({
   const recordingAction: MouseEventHandler<HTMLButtonElement> = isRecording
     ? onStopRecording
     : onStartRecording;
+  const recordingButton = (
+    <button
+      className="recording-button"
+      data-recording={isRecording ? "true" : "false"}
+      aria-describedby={joinDescriptionIds(
+        captureDisabled && "capture-readiness",
+        !captureDisabled && isProcessing && "recording-processing-help",
+        !captureDisabled &&
+          !isProcessing &&
+          hasPendingRecording &&
+          "recording-pending-help",
+        showHelp && "recording-onboarding-help",
+      )}
+      disabled={captureDisabled || isProcessing || hasPendingRecording}
+      onClick={recordingAction}
+      type="button"
+    >
+      {isRecording ? (
+        <span aria-hidden="true" className="stop-icon" />
+      ) : (
+        <MicrophoneIcon />
+      )}
+      <span>
+        {isRecording
+          ? "Stop recording"
+          : isProcessing
+            ? "Preparing transcript"
+            : hasPendingRecording
+              ? "Transcript needs attention"
+              : "Start recording"}
+      </span>
+    </button>
+  );
 
   return (
     <div
@@ -660,6 +746,17 @@ export function CaptureCanvas({
                 </button>
               </>
             ) : null}
+            <button
+              aria-controls="capture-help-cues"
+              aria-expanded={showHelp}
+              aria-pressed={showHelp}
+              className="help-toggle"
+              onClick={() => setShowHelp((isVisible) => !isVisible)}
+              type="button"
+            >
+              <span aria-hidden="true" className="help-toggle__mark">?</span>
+              <span>Help Me</span>
+            </button>
           </nav>
           <div className="site-header__status">
             <PersistenceStatus
@@ -674,7 +771,9 @@ export function CaptureCanvas({
         className={
           isFlowMode
             ? "capture-layout capture-layout--flow-mode"
-            : "capture-layout"
+            : showHelp
+              ? "capture-layout capture-layout--help"
+              : "capture-layout"
         }
       >
         <section
@@ -717,6 +816,7 @@ export function CaptureCanvas({
           )}
 
           <div
+            id="capture-help-cues"
             className={
               isFlowMode
                 ? "capture-workspace capture-workspace--flow-mode"
@@ -729,6 +829,7 @@ export function CaptureCanvas({
                   onRequestPrompt={onRequestPrompt}
                   promptBusy={guidancePromptState.status === "loading"}
                   promptDisabled={promptRequestDisabled}
+                  showHelp={showHelp}
                 /> : null}
                 {!isFlowMode ? <GuidancePromptPanel
                   onDismissPrompt={onDismissPrompt}
@@ -741,9 +842,18 @@ export function CaptureCanvas({
                   className={
                     isFlowMode
                       ? "editor-region editor-region--flow-mode"
-                      : "editor-region"
+                      : showHelp
+                        ? "editor-region help-anchor help-anchor--editor help-anchor--left"
+                        : "editor-region"
                   }
                 >
+                  {!isFlowMode && showHelp ? (
+                    <HelpCue
+                      id="editor-onboarding-help"
+                      side="left"
+                      text={editorHelpText.editor}
+                    />
+                  ) : null}
                   {!isFlowMode && readinessNotice ? (
                     <div
                       className="readiness-alert"
@@ -758,13 +868,11 @@ export function CaptureCanvas({
                     Write or edit your story
                   </label>
                   <textarea
-                    aria-describedby={
-                      isFlowMode
-                        ? undefined
-                        : readinessNotice
-                        ? "editor-help capture-readiness"
-                        : "editor-help"
-                    }
+                    aria-describedby={joinDescriptionIds(
+                      !isFlowMode && "editor-help",
+                      !isFlowMode && readinessNotice && "capture-readiness",
+                      !isFlowMode && showHelp && "editor-onboarding-help",
+                    )}
                     className={
                       isFlowMode
                         ? "story-editor story-editor--flow-mode"
@@ -878,18 +986,28 @@ export function CaptureCanvas({
                   </div>
                 ) : (
                   <div className="flow-mode-entry">
-                    <button
-                      aria-describedby={
-                        flowModeDisabled ? "flow-mode-unavailable" : undefined
-                      }
-                      className="flow-mode-entry__button"
-                      disabled={flowModeDisabled}
-                      onClick={() => setIsFlowMode(true)}
-                      ref={flowModeButtonRef}
-                      type="button"
-                    >
-                      Flow Mode
-                    </button>
+                    <div className="help-anchor help-anchor--flow help-anchor--right">
+                      <button
+                        aria-describedby={joinDescriptionIds(
+                          flowModeDisabled && "flow-mode-unavailable",
+                          showHelp && "flow-mode-onboarding-help",
+                        )}
+                        className="flow-mode-entry__button"
+                        disabled={flowModeDisabled}
+                        onClick={() => setIsFlowMode(true)}
+                        ref={flowModeButtonRef}
+                        type="button"
+                      >
+                        Flow Mode
+                      </button>
+                      {showHelp ? (
+                        <HelpCue
+                          id="flow-mode-onboarding-help"
+                          side="right"
+                          text={editorHelpText.flowMode}
+                        />
+                      ) : null}
+                    </div>
                     {flowModeDisabled ? (
                       <span className="visually-hidden" id="flow-mode-unavailable">
                         Flow Mode is available while you are writing.
@@ -973,65 +1091,68 @@ export function CaptureCanvas({
                 /> : null}
 
                 {!isFlowMode ? <div className="capture-actions">
-                  <button
-                    className="recording-button"
-                    data-recording={isRecording ? "true" : "false"}
-                    aria-describedby={
-                      captureDisabled
-                        ? "capture-readiness"
-                        : isProcessing
-                          ? "recording-processing-help"
-                          : hasPendingRecording
-                            ? "recording-pending-help"
-                            : undefined
-                    }
-                    disabled={
-                      captureDisabled || isProcessing || hasPendingRecording
-                    }
-                    onClick={recordingAction}
-                    type="button"
-                  >
-                    {isRecording ? (
-                      <span aria-hidden="true" className="stop-icon" />
-                    ) : (
-                      <MicrophoneIcon />
-                    )}
-                    <span>
-                      {isRecording
-                        ? "Stop recording"
-                        : isProcessing
-                          ? "Preparing transcript"
-                          : hasPendingRecording
-                            ? "Transcript needs attention"
-                            : "Start recording"}
-                    </span>
-                  </button>
-                  <div className="capture-state-row">
-                    {isRecording ? <RecordingActivityWave /> : null}
-                    <div
-                      aria-atomic="true"
-                      aria-live="polite"
-                      className="capture-state"
-                      role="status"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="capture-state__mark"
-                        data-phase={phase}
+                  {showHelp ? (
+                    <div className="help-anchor help-anchor--recording help-anchor--left">
+                      <HelpCue
+                        id="recording-onboarding-help"
+                        side="left"
+                        text={editorHelpText.recording}
                       />
-                      <span>{phaseLabels[phase]}</span>
+                      {recordingButton}
                     </div>
-                    {isRecording ? (
-                      <time
-                        aria-label={`Recording duration ${describeDuration(recordingDurationSeconds)}`}
-                        className="recording-duration"
-                        dateTime={`PT${Math.max(0, Math.floor(recordingDurationSeconds))}S`}
-                        role="timer"
+                  ) : recordingButton}
+                  {onStartNewStory ? (
+                    <button
+                      aria-describedby={
+                        startNewStoryDisabled
+                          ? "new-story-unavailable"
+                          : undefined
+                      }
+                      className="new-story-button"
+                      disabled={startNewStoryDisabled}
+                      onClick={onStartNewStory}
+                      type="button"
+                    >
+                      New Story
+                    </button>
+                  ) : null}
+                  {onStartNewStory && startNewStoryDisabled ? (
+                    <span
+                      className="visually-hidden"
+                      id="new-story-unavailable"
+                    >
+                      Finish the current recording and wait until every change
+                      is saved before starting a new story.
+                    </span>
+                  ) : null}
+                  {phase !== "editing" ? (
+                    <div className="capture-state-row">
+                      {isRecording ? <RecordingActivityWave /> : null}
+                      <div
+                        aria-atomic="true"
+                        aria-live="polite"
+                        className="capture-state"
+                        role="status"
                       >
-                        {formatDuration(recordingDurationSeconds)}
-                      </time>
-                    ) : null}
-                  </div>
+                        <span
+                          aria-hidden="true"
+                          className="capture-state__mark"
+                          data-phase={phase}
+                        />
+                        <span>{phaseLabels[phase]}</span>
+                      </div>
+                      {isRecording ? (
+                        <time
+                          aria-label={`Recording duration ${describeDuration(recordingDurationSeconds)}`}
+                          className="recording-duration"
+                          dateTime={`PT${Math.max(0, Math.floor(recordingDurationSeconds))}S`}
+                          role="timer"
+                        >
+                          {formatDuration(recordingDurationSeconds)}
+                        </time>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {isProcessing ? (
                     <span
                       className="visually-hidden"
@@ -1074,42 +1195,16 @@ export function CaptureCanvas({
                   ) : null}
                 </div> : null}
 
-                {!isFlowMode && (onDiscardRecoveredDraft || onStartNewStory) ? (
+                {!isFlowMode && onDiscardRecoveredDraft ? (
                   <div className="draft-lifecycle-actions">
-                    {onDiscardRecoveredDraft ? (
-                      <button
-                        className="text-action draft-lifecycle-actions__button"
-                        disabled={isRecording || isProcessing}
-                        onClick={onDiscardRecoveredDraft}
-                        type="button"
-                      >
-                        Discard draft
-                      </button>
-                    ) : null}
-                    {onStartNewStory ? (
-                      <button
-                        aria-describedby={
-                          startNewStoryDisabled
-                            ? "new-story-unavailable"
-                            : undefined
-                        }
-                        className="text-action draft-lifecycle-actions__button"
-                        disabled={startNewStoryDisabled}
-                        onClick={onStartNewStory}
-                        type="button"
-                      >
-                        Start a new story
-                      </button>
-                    ) : null}
-                    {onStartNewStory && startNewStoryDisabled ? (
-                      <span
-                        className="visually-hidden"
-                        id="new-story-unavailable"
-                      >
-                        Finish the current recording and wait until every change
-                        is saved before starting a new story.
-                      </span>
-                    ) : null}
+                    <button
+                      className="text-action draft-lifecycle-actions__button"
+                      disabled={isRecording || isProcessing}
+                      onClick={onDiscardRecoveredDraft}
+                      type="button"
+                    >
+                      Discard draft
+                    </button>
                   </div>
                 ) : null}
           </div>

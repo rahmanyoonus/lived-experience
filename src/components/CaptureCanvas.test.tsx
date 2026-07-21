@@ -57,6 +57,88 @@ describe("CaptureCanvas", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("toggles contextual editor help without blocking capture", async () => {
+    const user = userEvent.setup();
+    render(
+      <CaptureCanvas
+        {...makeProps({
+          onRequestPrompt: vi.fn(),
+        })}
+      />,
+    );
+
+    const helpButton = screen.getByRole("button", { name: "Help Me" });
+    expect(helpButton).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByText("Click here to hide all distractions."),
+    ).not.toBeInTheDocument();
+
+    await user.click(helpButton);
+
+    expect(helpButton).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByText(
+        "Click here for story ideas and prompts to get you going.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Type here. Dont worry about spelling and punctuations."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Click here to speak and record your memories. Transcripts are automatically generated for your review.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Click here to hide all distractions."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Write or edit your story" }),
+    ).toHaveAttribute(
+      "aria-describedby",
+      expect.stringContaining("editor-onboarding-help"),
+    );
+    expect(
+      screen.getByRole("button", { name: "Start recording" }),
+    ).toHaveAttribute(
+      "aria-describedby",
+      expect.stringContaining("recording-onboarding-help"),
+    );
+
+    await user.click(helpButton);
+    expect(helpButton).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByText("Click here to hide all distractions."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("places the quiet new-story action directly after recording", async () => {
+    const user = userEvent.setup();
+    const onStartNewStory = vi.fn();
+    render(
+      <CaptureCanvas
+        {...makeProps({
+          hasStarted: true,
+          onStartNewStory,
+          phase: "editing",
+        })}
+      />,
+    );
+
+    const recordingButton = screen.getByRole("button", {
+      name: "Start recording",
+    });
+    const newStoryButton = screen.getByRole("button", {
+      name: "New Story",
+    });
+
+    expect(recordingButton.nextElementSibling).toBe(newStoryButton);
+    expect(newStoryButton).toHaveClass("new-story-button");
+    expect(screen.queryByText("Ready to continue")).not.toBeInTheDocument();
+    await user.click(newStoryButton);
+    expect(onStartNewStory).toHaveBeenCalledOnce();
+  });
+
   it("shows a one-off prompt without changing the story or selected mode", async () => {
     const user = userEvent.setup();
     const onContentChange = vi.fn();

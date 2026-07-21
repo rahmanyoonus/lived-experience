@@ -1510,7 +1510,7 @@ describe("App capture integration", () => {
     ).toHaveValue("");
     expect(screen.queryByText("Saved")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Start a new story" }),
+      screen.queryByRole("button", { name: "New Story" }),
     ).not.toBeInTheDocument();
   });
 
@@ -1545,7 +1545,7 @@ describe("App capture integration", () => {
       await screen.findByText(/could not be acknowledged by cloud saving/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Start a new story" }),
+      screen.getByRole("button", { name: "New Story" }),
     ).toBeDisabled();
     expect((await persistence.recoverGuestDraft())?.story.current_text).toBe(
       text,
@@ -1570,7 +1570,7 @@ describe("App capture integration", () => {
       screen.queryByRole("button", { name: "Sync now" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Start a new story" }),
+      screen.getByRole("button", { name: "New Story" }),
     ).toBeEnabled();
   });
 
@@ -1681,7 +1681,7 @@ describe("App capture integration", () => {
 
     const editor = await screen.findByDisplayValue(text);
     const newStory = await screen.findByRole("button", {
-      name: "Start a new story",
+      name: "New Story",
     });
     await waitFor(() => expect(newStory).toBeEnabled());
     await user.click(newStory);
