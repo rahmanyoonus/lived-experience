@@ -725,6 +725,17 @@ export function CaptureCanvas({
                 New story
               </span>
             )}
+            <button
+              aria-controls="capture-help-cues"
+              aria-expanded={showHelp}
+              aria-pressed={showHelp}
+              className="help-toggle"
+              onClick={() => setShowHelp((isVisible) => !isVisible)}
+              type="button"
+            >
+              <span aria-hidden="true" className="help-toggle__mark">?</span>
+              <span>Help Me</span>
+            </button>
             {isAuthenticated ? (
               <>
                 <button
@@ -746,17 +757,6 @@ export function CaptureCanvas({
                 </button>
               </>
             ) : null}
-            <button
-              aria-controls="capture-help-cues"
-              aria-expanded={showHelp}
-              aria-pressed={showHelp}
-              className="help-toggle"
-              onClick={() => setShowHelp((isVisible) => !isVisible)}
-              type="button"
-            >
-              <span aria-hidden="true" className="help-toggle__mark">?</span>
-              <span>Help Me</span>
-            </button>
           </nav>
           <div className="site-header__status">
             <PersistenceStatus

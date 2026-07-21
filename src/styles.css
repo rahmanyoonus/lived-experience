@@ -296,18 +296,24 @@ button.navigation-tab:hover:not(:disabled) {
   font-weight: var(--weight-medium);
   white-space: nowrap;
   background: transparent;
-  border: 1px solid var(--line-2);
+  border: 0;
   border-radius: var(--radius-pill);
   transition: color var(--duration-quick) var(--ease-out),
-    background-color var(--duration-quick) var(--ease-out),
-    border-color var(--duration-quick) var(--ease-out);
+    background-color var(--duration-quick) var(--ease-out);
 }
 
 .help-toggle:hover,
 .help-toggle[aria-pressed="true"] {
   color: var(--on-accent);
   background: var(--accent);
-  border-color: var(--accent);
+}
+
+.help-toggle:focus-visible {
+  color: var(--on-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: var(--accent);
+  outline: none;
 }
 
 .help-toggle:active {
@@ -1405,7 +1411,6 @@ button.navigation-tab:hover:not(:disabled) {
 @media (forced-colors: active) {
   .navigation-tab,
   .persistence-status,
-  .help-toggle,
   .mode-control,
   .recording-button,
   .keep-story__button,

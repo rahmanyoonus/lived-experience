@@ -442,6 +442,11 @@ describe("CaptureCanvas", () => {
       />,
     );
 
+    const helpButton = screen.getByRole("button", { name: "Help Me" });
+    const storiesButton = screen.getByRole("button", { name: "Your stories" });
+    expect(helpButton.compareDocumentPosition(storiesButton)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
     await user.click(screen.getByRole("button", { name: "Your stories" }));
     expect(onOpenStories).toHaveBeenCalledOnce();
     await user.click(
