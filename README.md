@@ -4,6 +4,109 @@ Lived Experience is a private, distraction-free web application for capturing
 personal stories by voice or writing. Its product rule is: **Capture first. Make
 sense of it later.**
 
+## OpenAI Build Week submission
+
+**Track:** Apps for Your Life
+
+Famous lives are remembered, while countless others go unheard. Lived
+Experience helps people preserve their stories, work, and hard-won wisdom in
+their own words and voice, with AI available only by invitation.
+
+Unlike an AI memoir writer, the application does not summarise, polish, split,
+categorise, or reinterpret a person's story. It reduces the friction of
+starting, protects unfinished work from common browser and network failures,
+and keeps the teller in control of every edit.
+
+## Demo
+
+- Live application: <https://livedexp.atomik.bn>
+- Source repository: <https://github.com/rahmanyoonus/lived-experience>
+- Video demo: to be added to the Devpost submission
+
+No shared credentials are required. Use only fictional content when testing.
+The fastest safe path is:
+
+1. Open the live application and select **Use example text** on the untouched
+   canvas.
+2. Edit the fictional story and observe the device save state.
+3. Select **Guide me with a prompt** to request one optional GPT-5.6 question.
+4. Optionally record and explicitly stop a short English voice segment; the
+   transcript appears only after processing.
+5. Select **Keep this story** and enter the six-digit email code in the same
+   browser tab.
+6. Open **Your Stories** or **Visualise my stories** to retrieve the private
+   retained story.
+
+## How we used Codex
+
+Codex was used throughout OpenAI Build Week as a repository-aware engineering
+collaborator. It helped us:
+
+1. Turn the PRD's trust requirements into explicit capture, recovery, and sync
+   states.
+2. Design the browser-first IndexedDB, Supabase, and Cloudflare Worker
+   architecture.
+3. Implement guest recording, transcription review, version history,
+   authentication, cloud migration, and optional guidance.
+4. Reproduce and fix persistence, Storage-policy, authentication, and
+   deployment failures.
+5. Build and expand the automated application, Worker, and database tests.
+6. Review privacy boundaries, accessibility, responsive behaviour, and
+   truthful product copy.
+7. Deploy and verify the live Cloudflare and OpenAI boundaries with synthetic
+   content.
+
+We made the final product and provider decisions. Nine ADRs record the
+consequential choices and their limitations. The representative Codex task is
+**Build Lived Experience MVP** (`019f774d-016e-70f3-881a-fcdf9e0e248b`); its
+`/feedback` Session ID is supplied separately in the Devpost entry.
+
+## How we used GPT-5.6
+
+Lived Experience uses `gpt-5.6-luna` for the optional **Guide me with a
+prompt** action. The model receives either no story content or a bounded excerpt
+from only the story currently open. It returns one short, open-ended question
+as schema-validated structured output.
+
+GPT-5.6 is valuable here because a useful question must understand incomplete,
+conversational context while avoiding leading narratives, invented facts,
+diagnosis, judgement, or instructions embedded inside the story text. A fixed
+template cannot reliably make those distinctions.
+
+The Worker treats story text as untrusted data, uses `store: false`, enables no
+tools, imposes input and output bounds, validates the response schema, applies
+timeouts, rate limits, and a spend gate, and keeps prompts and outputs out of
+routine logs. The question is never inserted into the person's story and can be
+dismissed without changing it.
+
+## What was built during OpenAI Build Week
+
+There was no pre-existing application code. The repository began during Build
+Week with the product requirements and agent guardrails. From July 19 to July
+22 in Brunei time, we built the React capture UI, IndexedDB recovery, chunked
+recording, post-stop transcription, original-artefact and version recovery,
+Supabase schema and Storage policies, email authentication, idempotent
+guest-to-cloud migration, Cloudflare Worker API, rate and spend controls,
+GPT-5.6 prompt guidance, private library, story visualisation, automated tests,
+deployment, and live synthetic verification.
+
+Evidence is preserved in the repository history from the initial commit
+`bc86a77` onwards and in the representative Codex task listed above.
+
+## Known limitations
+
+- The initial transcription language is English.
+- **Interview me** and cross-story guidance are intentionally deferred.
+- A fresh real-inbox, same-tab OTP verification through cloud save, reload, and
+  private-library retrieval remains a final live validation item.
+- OpenAI Zero Data Retention is not enabled. `store: false` prevents a stored
+  Responses object, but default provider abuse-monitoring retention may still
+  apply.
+- Deletion recovery, permanent deletion, export, backup, and account-recovery
+  policies require approval before a wider launch.
+- The story visualisation is private presentation only; it does not infer
+  themes, timelines, or relationships.
+
 The first local vertical slice is implemented. Guest typing, chunked recording,
 device recovery, post-recording transcription review, immutable originals,
 version restoration, passwordless email continuation, cloud synchronisation, and the
@@ -221,14 +324,13 @@ speech. See [ADR 0004](./docs/decisions/0004-cloudflare-api-placement.md).
 
 Resend custom SMTP is active in `LivedExp` with the verified sender
 `no-reply@email.atomik.bn`. The sending credential is restricted to sending
-access and the `email.atomik.bn` domain. The hosted magic-link template uses the
-token hash and exact application callback. A synthetic guest story completed
-live Gmail delivery, same-browser callback, private cloud acknowledgement,
-reload to a fresh capture canvas, private-library retrieval, and reopening from
-cloud without duplication or sync error. A recovered story with an original
-recording then completed the same guest-to-account path after the
-reserved-object Storage insert policy was repaired; the live app acknowledged
-both the story and its original audio as private account data.
+access and the `email.atomik.bn` domain. The hosted email template now sends a
+six-digit OTP for entry in the initiating browser tab. The same-tab OTP
+application flow and template are deployed, but a fresh live Gmail OTP
+delivery, verification, cloud save, reload, and private-library retrieval still
+needs confirmation. The earlier synthetic text and original-audio
+guest-to-cloud paths were live-verified through the superseded magic-link
+callback, including the repaired reserved-object Storage insert policy.
 
 ## Local Supabase
 
