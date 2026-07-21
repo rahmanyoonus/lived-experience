@@ -1,0 +1,6 @@
+# Server-only OpenAI project credential. Never place this in a VITE_* variable.
+OPENAI_API_KEY=sk-proj-replace_me
+
+# Random secret of at least 32 characters used only to HMAC anonymous browser,
+# network, and segment identifiers before Durable Object quota storage.
+RATE_LIMIT_SECRET=replace_with_at_least_32_random_characters

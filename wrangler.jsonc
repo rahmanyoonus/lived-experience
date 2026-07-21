@@ -1,0 +1,51 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "lived-experience",
+  "main": "./worker/index.ts",
+  "workers_dev": false,
+  "preview_urls": false,
+  "compatibility_date": "2026-07-19",
+  "compatibility_flags": ["nodejs_compat", "enable_request_signal"],
+  "placement": {
+    "region": "aws:us-east-1"
+  },
+  "routes": [
+    {
+      "pattern": "livedexp.atomik.bn",
+      "custom_domain": true
+    }
+  ],
+  "secrets": {
+    "required": ["OPENAI_API_KEY", "RATE_LIMIT_SECRET"]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RATE_LIMITER",
+        "class_name": "TranscriptionRateLimiter"
+      },
+      {
+        "name": "SPEND_GATE",
+        "class_name": "TranscriptionSpendGate"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "TranscriptionRateLimiter",
+        "TranscriptionSpendGate"
+      ]
+    }
+  ],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}

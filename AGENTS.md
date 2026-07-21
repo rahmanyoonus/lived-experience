@@ -14,17 +14,35 @@ surface the conflict rather than silently changing the product.
 
 ## Current repository state
 
-The repository currently contains product documentation only. No production
-framework, hosting platform, database, authentication provider, transcription
-provider, or AI provider has been selected.
+The repository now contains the first provider-gated vertical slice. React,
+TypeScript, and Vite provide the browser application; IndexedDB provides guest
+recovery; Supabase adapters and migrations provide the authenticated
+cloud boundary; and one Cloudflare Worker with Static Assets provides the
+deployment and OpenAI transcription boundary. See `README.md` and the ADRs in
+`docs/decisions/` for the approved architecture and unresolved activation
+decisions.
 
-- Do not invent or imply that an undecided technology is already approved.
-- When asked to scaffold the application, make the smallest defensible
-  architecture choice and document it.
+- The target Supabase project is `LivedExp` (`wrymrogpqptxairnlgpf`). Its
+  migrations are applied, the live schema passes linting, and the browser
+  configuration is connected. The Atomik Cloudflare Worker, required secrets,
+  `aws:us-east-1` placement, and a synthetic Worker-to-OpenAI transcription are
+  live and verified. Passwordless email magic links are selected for the
+  hackathon. Resend custom SMTP is active through the verified
+  `email.atomik.bn` domain, and the hosted token-hash template is configured,
+  and the synthetic text guest-to-cloud flow is verified through live Gmail
+  delivery, callback, cloud save, reload, and private-library retrieval. The
+  authenticated original-audio guest-to-cloud path is live-verified in desktop
+  Chrome through upload, cloud acknowledgement, reload, and private-library
+  recovery. Do not imply that another unverified adapter or flow is live.
+- OpenAI Zero Data Retention is deferred. The accepted transcription boundary
+  relies on the current documented defaults for `/v1/audio/transcriptions`;
+  re-check those defaults before sending personal story audio or launching
+  publicly, and whenever the endpoint or provider policy changes.
 - Record consequential and difficult-to-reverse choices in a short ADR under
   `docs/decisions/`.
-- Once build, test, lint, and development commands exist, document their exact
-  forms in `README.md` and keep this file current.
+- Use `npm run dev`, `npm run lint`, `npm run typecheck`, `npm test`, and
+  `npm run build` for application work. Use the exact Supabase and Wrangler
+  verification commands documented in `README.md`.
 
 ## Product north star
 
@@ -44,8 +62,10 @@ All implementation work must preserve these decisions:
 - Let a guest type or begin recording before creating an account.
 - Keep **Just listen** as the default. **Guide me** and **Give me a prompt** must
   remain clearly available and optional.
-- Keep the screen visually still while recording. Do not show a live transcript,
-  moving waveform, animated words, or distracting layout changes.
+- Keep the screen visually calm while recording. Do not show a live transcript,
+  animated words, reactive audio visualisation, or distracting layout changes.
+  One minimal, muted sine wave may move only while recording to confirm that
+  capture is active; it must become static when reduced motion is requested.
 - Recording begins and ends through explicit user action. Silence must not stop
   or split a recording.
 - Show the transcript only after the spoken segment has stopped and processing
@@ -59,8 +79,9 @@ All implementation work must preserve these decisions:
   subjects or memories; do not automatically split, merge, or warn about it.
 - Autosave continuously. Guest work is stored locally and labelled as
   device-only; authenticated work is cloud-saved with truthful status.
-- Offer a non-blocking **Keep this story** action after content exists. Google is
-  the only MVP sign-in method.
+- Offer a non-blocking **Keep this story** action after content exists.
+  Passwordless email magic links are the only hackathon first-version sign-in
+  method; Google OAuth is deferred.
 - Transfer the active guest story through authentication without refresh-related
   loss, duplication, or unexpected navigation.
 - Make use of previous stories during guidance explicit and user-controlled.
@@ -165,7 +186,8 @@ visible complexity or speculative infrastructure to the MVP.
 - Request microphone permission only after the user selects voice capture and
   explain why it is needed.
 - Keep provider-specific transcription, AI, storage, and authentication code
-  behind narrow interfaces. Provider selection remains an open decision.
+  behind narrow interfaces. An implemented adapter does not authorise live
+  activation.
 - Avoid speculative abstraction. Introduce a shared abstraction only when it
   protects a product invariant, provider boundary, or repeated behaviour.
 - Preserve unrelated user changes. Do not rewrite or delete existing work to
@@ -182,12 +204,15 @@ For capture-related changes, test at minimum:
 - immediate guest typing and recording without authentication;
 - microphone approval and denial;
 - explicit stop and a long silence that does not stop recording;
-- absence of live transcript and moving waveform during recording;
+- absence of live transcript, reactive audio visualisation, and distracting
+  motion during recording; the approved muted sine wave appears only while
+  recording and becomes static under reduced motion;
 - transcript appearance only after stop and processing;
 - faithful transcription behaviour and uncertainty handling;
 - direct editing plus recovery of original audio and transcript;
 - reload, browser restart, offline buffering, reconnect, and retry;
-- guest-to-Google migration without loss or duplication;
+- guest-to-account migration through the magic-link flow without loss or
+  duplication;
 - truthful save-state transitions;
 - keyboard, screen-reader, reduced-motion, and mobile-width behaviour; and
 - analytics and logs containing no raw story content.
@@ -213,3 +238,8 @@ For guidance-related changes, also test:
   databases, or unredacted debug output.
 - Summarise completed work with the user-visible outcome, tests run, and any
   remaining risk or open decision.
+
+## Guidance for agents
+
+- Do not consider or worry about backward compatibility.
+- Do not think about legacy support or issues.

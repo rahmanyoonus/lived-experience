@@ -12,6 +12,10 @@
 
 **Product owner:** TBD
 
+**Hackathon authentication update (20 July 2026):** Passwordless email magic
+links replace Google OAuth as the only first-version sign-in method. Google
+OAuth is deferred.
+
 > **Product promise:** A private, distraction-free place where people can speak or write their stories at their own pace, with their original voice faithfully preserved.
 
 ## Document purpose
@@ -99,7 +103,7 @@ The primary user is the person telling their own story. They may be documenting 
 
 - **Immediate value.** A first-time visitor can begin capturing before account creation.
 
-- **Stillness during speech.** The interface does not animate or display moving text while the person is speaking.
+- **Calm during speech.** The interface does not display moving text or reactive audio visualisation while the person is speaking. One minimal, muted sine wave may move only to confirm that recording is active and becomes static when reduced motion is requested.
 
 - **Faithful preservation.** Original audio and the first transcript remain recoverable; AI never silently rewrites history.
 
@@ -113,7 +117,7 @@ The primary user is the person telling their own story. They may be documenting 
 
 ### 3.1 MVP outcome
 
-A person can open the web application, capture a story through voice or writing without first creating an account, review and directly edit a faithful transcript, retain the draft locally, and use Google sign-in once to preserve the story in their personal cloud library.
+A person can open the web application, capture a story through voice or writing without first creating an account, review and directly edit a faithful transcript, retain the draft locally, and use a passwordless email magic link once to preserve the story in their personal cloud library.
 
 ### 3.2 Included capabilities
 
@@ -125,7 +129,7 @@ A person can open the web application, capture a story through voice or writing 
 
 - Visible Guide me and Give me a prompt options
 
-- Still recording state with explicit stop control
+- Calm recording state with explicit stop control, a minimal muted sine wave, and elapsed time
 
 - Transcript displayed after the spoken segment ends
 
@@ -135,7 +139,7 @@ A person can open the web application, capture a story through voice or writing 
 
 - Continuous local autosave before authentication and cloud autosave after authentication
 
-- Google sign-in triggered through a one-time Keep this story action
+- Passwordless email sign-in triggered through a one-time Keep this story action
 
 - Fresh canvas as the default authenticated landing experience
 
@@ -169,7 +173,7 @@ A person can open the web application, capture a story through voice or writing 
 
 2. **Begin.** They type immediately or select the microphone. Microphone permission is requested only after the first microphone action, with a short explanation.
 
-3. **Speak.** Just listen is active. The canvas remains visually still and shows only a subtle Listening status and a static duration indicator.
+3. **Speak.** Just listen is active. The canvas remains visually calm and shows a subtle Listening status, a minimal muted sine wave confirming that recording is active, and an elapsed-time indicator.
 
 4. **Stop a segment.** The user explicitly stops recording. Silence never ends a recording automatically.
 
@@ -177,9 +181,9 @@ A person can open the web application, capture a story through voice or writing 
 
 6. **Retain locally.** The story is already temporarily autosaved in the current browser and clearly labelled as device-only.
 
-7. **Keep.** A non-blocking Keep this story action offers Continue with Google. The prompt does not interrupt an active capture.
+7. **Keep.** A non-blocking Keep this story action asks for an email address and offers Email me a sign-in link. The prompt does not interrupt an active capture, and the person can keep working locally after requesting the link.
 
-8. **Authenticate.** After Google sign-in, the same story remains open and is transferred to cloud autosave without duplication or lost edits.
+8. **Authenticate.** After the passwordless link returns to the same supported browser and device, the same story remains open and is transferred to cloud autosave without duplication or lost edits. A link opened elsewhere must not delete or falsely cloud-save the original device-only draft.
 
 ### 4.2 Returning authenticated capture
 
@@ -219,7 +223,7 @@ A person can open the web application, capture a story through voice or writing 
 
 ### 4.5 Guest recovery
 
-If an unsigned-in visitor closes the tab or browser, the guest draft remains recoverable on the same device. On return, the application should make the recovered draft visible without falsely implying that it has been cloud-saved. The user can keep it through Google sign-in or discard it. The exact local-retention period is a deferred policy decision.
+If an unsigned-in visitor closes the tab or browser, the guest draft remains recoverable on the same device for 30 days. On return, the application should make the recovered draft visible without falsely implying that it has been cloud-saved. The user can keep it through passwordless email sign-in or discard it.
 
 ## 5. Experience and interface requirements
 
@@ -250,10 +254,10 @@ Account and settings controls remain secondary. There is no dashboard, progress 
 | **State** | **User sees** | **Available action** |
 | --- | --- | --- |
 | **Empty** | No story record until the first character or recording begins. | Type, start voice, Guide me, or request a prompt. |
-| **Recording** | Still canvas; no live transcript or waveform. Static Listening state and duration only. | Stop the spoken segment. |
+| **Recording** | Calm canvas; no live transcript or reactive audio visualisation. A minimal muted sine wave confirms that capture is active beside the Listening state and elapsed time. | Stop the spoken segment. |
 | **Processing** | Recording is secure; transcript is being prepared. Editing controls remain stable. | Wait, type elsewhere if safe, or retry after an error. |
 | **Editing** | Faithful transcript appears in the canvas and can be directly edited. | Type, record more, undo, or leave. |
-| **Guest retained** | Device-only status and Keep this story action remain visible but non-blocking. | Continue with Google or keep working locally. |
+| **Guest retained** | Device-only status and Keep this story action remain visible but non-blocking. | Email a sign-in link or keep working locally. |
 | **Offline** | Local buffering and clear status prevent false confirmation of cloud save. | Continue where supported; sync when connection returns. |
 
 ### 5.4 Story library
@@ -290,7 +294,7 @@ AI supports capture without becoming the author. Its MVP roles are speech transc
 | **Remove filler words** | No | Preserve filler words unless the user explicitly requests editing. |
 | **Remove repetition or false starts** | No | Preserve the spoken form. |
 | **Rewrite grammar or vocabulary** | No | Do not make the speaker sound unlike themselves. |
-| **Guess uncertain words** | No | Mark uncertainty and allow audio review. |
+| **Guess uncertain words** | No | Mark uncertainty and label the complete stored audio part **Review this part**. Do not invent word-level timing. |
 
 ### 6.3 Transcript and editing layers
 
@@ -331,6 +335,7 @@ After capture, AI may generate a short, descriptive title for the library card. 
 | **Authentication transition** | The existing local story transfers to the authenticated account without refresh, duplication, or content loss. | Securing your story... |
 | **Authenticated** | New audio segments, text, and edits save continuously to cloud storage, with local buffering during connection interruptions. | Saving... / Saved |
 | **Failure** | The interface never displays Saved when the latest content is only buffered or has failed to persist. | Not yet synced / Retry |
+| **Concurrent edit** | The incumbent cloud text and the competing local text are both preserved as recoverable versions. The application never auto-merges them or silently overwrites either candidate. | Conflict found / Review versions |
 
 ### 7.2 Guest-to-account conversion
 
@@ -338,7 +343,9 @@ After capture, AI may generate a short, descriptive title for the library card. 
 
 - Once content exists, a non-blocking Keep this story action becomes available.
 
-- Selecting the action opens Continue with Google as the only MVP sign-in method.
+- Selecting the action reveals an email field and Email me a sign-in link as the only first-version sign-in method.
+
+- After a link is requested, the interface shows Check your email without claiming that the story is cloud-saved or blocking continued local editing.
 
 - Sign-in must return the user to the same story and cursor context where practical.
 
@@ -386,7 +393,7 @@ After capture, AI may generate a short, descriptive title for the library card. 
 | **CAP-02** | Allow immediate typing without creating an empty story before content exists. | Must |
 | **CAP-03** | Request microphone permission only after the user selects voice capture. | Must |
 | **CAP-04** | Record audio with explicit start and stop; silence must not end recording. | Must |
-| **CAP-05** | Keep the recording screen still: no live transcript or moving waveform. | Must |
+| **CAP-05** | Keep the recording screen calm: no live transcript, reactive audio visualisation, or distracting motion. Show only the approved minimal muted sine wave and elapsed time. | Must |
 | **CAP-06** | Display the transcript only after the spoken segment stops and processing completes. | Must |
 | **CAP-07** | Permit direct transcript editing, typing, undo/redo, and additional voice segments. | Must |
 | **CAP-08** | Insert new speech at the end by default or at an intentionally placed cursor. | Should |
@@ -412,9 +419,10 @@ After capture, AI may generate a short, descriptive title for the library card. 
 | **DAT-01** | Autosave guest content locally throughout capture and editing. | Must |
 | **DAT-02** | Recover an unsigned draft after accidental tab or browser closure on the same device. | Must |
 | **DAT-03** | Offer Keep this story without blocking ongoing capture. | Must |
-| **DAT-04** | Support Google sign-in and transfer the active guest story without loss or duplication. | Must |
+| **DAT-04** | Support passwordless email sign-in and transfer the active guest story without loss or duplication. | Must |
 | **DAT-05** | Continuously cloud-save authenticated content and buffer during network interruption. | Must |
 | **DAT-06** | Preserve original audio, original transcript, current story, and version history. | Must |
+| **DAT-07** | Preserve both candidates during a concurrent edit, show the conflict, and require a deliberate choice rather than auto-merging. | Must |
 | **LIB-01** | List retained stories in reverse chronological order. | Must |
 | **LIB-02** | Display title, date/time, verbatim excerpt, duration, and open action. | Must |
 | **LIB-03** | Allow the user to open and continue an earlier story in the same canvas. | Must |
@@ -427,7 +435,7 @@ After capture, AI may generate a short, descriptive title for the library card. 
 
 - **NFR-03 Accessibility.** Core capture, stop, mode, editor, sign-in, library, and recovery actions must be keyboard and screen-reader operable.
 
-- **NFR-04 Visual stability.** Recording must not cause moving text, waveform animation, layout shift, or uncontrolled focus changes.
+- **NFR-04 Visual stability.** Recording must not cause moving text, reactive audio visualisation, layout shift, or uncontrolled focus changes. The approved minimal sine wave is the only recording animation and becomes static under reduced motion.
 
 - **NFR-05 Performance.** The blank canvas should become interactive quickly; exact budgets are set after architecture selection and baseline measurement.
 
@@ -462,7 +470,7 @@ Initial metrics should validate whether people can begin, trust, and retain a st
 | **Measure** | **Definition** | **Why it matters** |
 | --- | --- | --- |
 | **Time to first capture** | Time from canvas becoming interactive to first typed character or microphone start. | Lower indicates reduced friction. |
-| **First-story retention** | Share of first-time visitors who create content and keep it through Google sign-in. | Tests the try-before-account model. |
+| **First-story retention** | Share of first-time visitors who create content and keep it through passwordless email sign-in. | Tests the try-before-account model. |
 | **Capture reliability** | Share of acknowledged text and audio segments recovered intact after reload and network interruption. | Must approach zero data-loss incidents. |
 | **Transcript correction rate** | Extent of user corrections attributable to transcription errors rather than intentional editing. | Signals transcription quality across real speech. |
 | **Return capture** | Share of retained users who create or continue another story within an observation window. | Indicates ongoing value without nudges. |
@@ -494,7 +502,7 @@ Initial metrics should validate whether people can begin, trust, and retain a st
 
 - A first-time visitor can type or start recording without creating an account.
 
-- The recording screen remains still and shows no transcript until the user explicitly stops the segment.
+- The recording screen remains calm, shows only the minimal muted sine wave and elapsed time, and shows no transcript until the user explicitly stops the segment.
 
 - A long silence does not end or split a recording.
 
@@ -504,7 +512,7 @@ Initial metrics should validate whether people can begin, trust, and retain a st
 
 - Guest content survives an accidental reload or browser restart on the same supported device.
 
-- Keep this story completes Google sign-in and preserves the active story without loss, duplication, or unexpected navigation.
+- Keep this story completes passwordless email sign-in and preserves the active story without loss, duplication, or unexpected navigation.
 
 - Authenticated autosave truthfully distinguishes Saving, Saved, and Not yet synced states.
 
@@ -523,7 +531,7 @@ Initial metrics should validate whether people can begin, trust, and retain a st
 | **Test** | **Research question** |
 | --- | --- |
 | **Start without instruction** | Can a person understand how to speak or write immediately? |
-| **Recording stillness** | Does hiding live transcription help the person focus and feel heard? |
+| **Recording calmness** | Does hiding live transcription while showing only restrained capture activity help the person focus and feel heard? |
 | **Explicit stop** | Is it clear how to finish one spoken segment without implying the story is complete? |
 | **Guest retention** | Does Keep this story appear at the right moment without interrupting expression? |
 | **Faithful transcript** | Does the transcript feel like the person's voice rather than an AI rewrite? |
@@ -541,28 +549,42 @@ Initial metrics should validate whether people can begin, trust, and retain a st
 | **Sharing** | Private invitations, selective sharing, anonymous or public publishing, discovery, and consent controls. |
 | **Media** | Photographs, documents, letters, video, and other memory anchors. |
 | **Engagement** | Optional reminders, prompts, anniversaries, and nudges without streaks or pressure. |
-| **Authentication** | Apple sign-in, mobile-number sign-in, passkeys, and account-recovery expansion. |
+| **Authentication** | Google OAuth, Apple sign-in, mobile-number sign-in, passkeys, and account-recovery expansion. |
 | **Platforms** | Native mobile applications, offline-first installation, and device integrations. |
 
-### 10.2 Decisions required before production build
+### 10.2 Decisions required before production launch
+
+The first implementation uses React and TypeScript with Vite, IndexedDB,
+Supabase, and one Cloudflare Worker with Static Assets. It supports current
+Chrome, Safari, and Edge on desktop, Chrome on Android, and Safari on iOS;
+English transcription; 30-minute user-created spoken segments; and 30-day guest
+retention on the current device. OpenAI `gpt-4o-mini-transcribe` receives
+ordered internal chunks of no more than four minutes or 20 MB while the product
+retains one logical spoken segment. Anonymous transcription is limited to three
+segments per hour and ten per day per browser and twenty per hour per IP, with
+a ten-minute processing timeout. The Worker stops new provider calls at US$49
+of conservatively reserved monthly spend, leaving a US$1 safety margin beneath
+the approved hard US$50 monthly ceiling.
+Authenticated audio is capped at 750,000,000 bytes per account for the Supabase
+Free project. Concurrent edits preserve both versions, show a conflict, and are
+never auto-merged. Transcription uncertainty is linked to the complete stored
+audio part and shown as **Review this part**, never as invented word timing.
+
+The remaining launch decisions are:
 
 - Final product name and brand identity
 
-- Supported browsers, devices, recording limits, and initial transcription languages
+- Shared-device privacy behaviour after the first single-person slice
 
-- Guest-draft local-retention period and shared-device privacy behaviour
-
-- Cloud architecture, storage model, transcription provider, AI provider, and regional data handling
+- Production regions, processing geography, backup policy, and regional data handling
 
 - Encryption, key management, deletion recovery window, backup, export, and account-recovery policies
 
 - Definition and frequency of automatic version-history snapshots
 
-- AI uncertainty display and audio-to-text playback interaction
-
 - Privacy notice, terms, consent language, age policy, and jurisdiction-specific compliance review
 
-- Operational cost limits for long recordings, transcription, storage, and AI guidance
+- Operational limits for later AI guidance and any scale beyond the hackathon allowance
 
 - Quantitative success targets after prototype baseline testing
 
@@ -570,7 +592,7 @@ Initial metrics should validate whether people can begin, trust, and retain a st
 
 1. **Prototype the capture canvas.** Create low-fidelity desktop and mobile-width web flows for empty, recording, processing, editing, guest-retained, and offline states.
 
-2. **Test the core interaction.** Run moderated sessions focused on starting, still recording, transcript review, and guest-to-Google retention.
+2. **Test the core interaction.** Run moderated sessions focused on starting, calm recording feedback, transcript review, and guest-to-account retention through email magic links.
 
 3. **Select architecture.** Evaluate browser recording reliability, local persistence, secure cloud storage, transcription quality, and authentication continuity.
 
