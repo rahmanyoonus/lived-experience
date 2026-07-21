@@ -153,15 +153,6 @@ enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
 site_url = "https://livedexp.atomik.bn"
-# The callback carries a random `auth_return` identifier so a magic-link tab can
-# reconnect to the correct device-only draft. Keep the query-bearing patterns in
-# sync with the hosted Auth redirect allowlist.
-additional_redirect_urls = [
-  "https://livedexp.atomik.bn/auth/confirm?auth_return=*",
-  "https://lived-experience.think-axis.workers.dev/auth/confirm?auth_return=*",
-  "http://127.0.0.1:5173/auth/confirm?auth_return=*",
-  "http://localhost:5173/auth/confirm?auth_return=*",
-]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).
@@ -239,12 +230,12 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
-# Local PKCE testing uses this template. Hosted projects apply it through the
+# Local email OTP testing uses this template. Hosted projects apply it through the
 # Auth dashboard after custom SMTP is configured; `supabase config push` cannot
 # change hosted email templates while the free default mailer is active.
 [auth.email.template.magic_link]
-subject = "Your Lived Experience sign-in link"
-content_path = "./supabase/templates/magic-link.html"
+subject = "Your Lived Experience verification code"
+content_path = "./supabase/templates/email-otp.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

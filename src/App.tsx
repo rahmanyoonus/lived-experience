@@ -19,7 +19,7 @@ import {
   type EditorSelection,
   type GuidancePromptState,
   type MicrophoneDialogKind,
-  type MagicLinkRequestResult,
+  type EmailOtpResult,
   type PersistenceState,
   type StoryArtefactsMode,
   type StoryAudioArtefact,
@@ -47,11 +47,11 @@ import {
 } from "./data";
 import { isSupabaseConfigured } from "./lib/supabase";
 import {
-  completeEmailMagicLinkReturn,
-  continueWithEmailMagicLink,
   getCurrentSession,
   onAuthStateChange,
+  requestEmailOtp,
   takeAuthReturnContext,
+  verifyEmailOtp,
   type AuthReturnContext,
 } from "./services/auth";
 import {
@@ -110,8 +110,8 @@ export interface AppDependencies {
   readonly isCloudConfigured?: () => boolean;
   readonly getCurrentSession?: typeof getCurrentSession;
   readonly onAuthStateChange?: typeof onAuthStateChange;
-  readonly continueWithEmailMagicLink?: typeof continueWithEmailMagicLink;
-  readonly completeEmailMagicLinkReturn?: typeof completeEmailMagicLinkReturn;
+  readonly requestEmailOtp?: typeof requestEmailOtp;
+  readonly verifyEmailOtp?: typeof verifyEmailOtp;
   readonly takeAuthReturnContext?: typeof takeAuthReturnContext;
   readonly createCloudPersistence?: () => CloudPersistence;
   readonly synchroniseActiveStory?: typeof synchroniseActiveStoryWithCloud;
@@ -391,12 +391,10 @@ export function App({ dependencies = {} }: AppProps) {
     dependencies.isCloudConfigured?.() ?? isSupabaseConfigured();
   const readCurrentSession =
     dependencies.getCurrentSession ?? getCurrentSession;
-  const completeMagicLinkReturn =
-    dependencies.completeEmailMagicLinkReturn ?? completeEmailMagicLinkReturn;
   const subscribeToAuth =
     dependencies.onAuthStateChange ?? onAuthStateChange;
-  const startEmailContinuation =
-    dependencies.continueWithEmailMagicLink ?? continueWithEmailMagicLink;
+  const requestOtp = dependencies.requestEmailOtp ?? requestEmailOtp;
+  const verifyOtp = dependencies.verifyEmailOtp ?? verifyEmailOtp;
   const readAuthReturnContext =
     dependencies.takeAuthReturnContext ?? takeAuthReturnContext;
   const createCloudPersistence =
@@ -738,8 +736,7 @@ export function App({ dependencies = {} }: AppProps) {
     }
 
     let cancelled = false;
-    void completeMagicLinkReturn()
-      .then(() => readCurrentSession())
+    void readCurrentSession()
       .then((currentSession) => {
         if (!cancelled) {
           setSession(currentSession);
@@ -752,9 +749,7 @@ export function App({ dependencies = {} }: AppProps) {
             reason: "authentication-unavailable",
           });
           setCaptureMessage(
-            window.location.pathname === "/auth/confirm"
-              ? "This sign-in link is invalid or has expired. Your work remains saved on this device."
-              : "Your account session could not be checked. Your work remains saved on this device.",
+            "Your account session could not be checked. Your work remains saved on this device.",
           );
         }
       })
@@ -773,7 +768,6 @@ export function App({ dependencies = {} }: AppProps) {
     };
   }, [
     cloudConfigured,
-    completeMagicLinkReturn,
     readCurrentSession,
     subscribeToAuth,
   ]);
@@ -1977,9 +1971,9 @@ export function App({ dependencies = {} }: AppProps) {
     session,
   ]);
 
-  const handleSendMagicLink = useCallback(async (
+  const handleRequestEmailOtp = useCallback(async (
     email: string,
-  ): Promise<MagicLinkRequestResult> => {
+  ): Promise<EmailOtpResult> => {
     if (emergencyAudioBackupRef.current) {
       const message =
         "Download the unsaved recording backup before signing in by email.";
@@ -1997,7 +1991,7 @@ export function App({ dependencies = {} }: AppProps) {
     } catch {
       setPersistenceState("sync-error");
       const message =
-        "The sign-in link was not sent because your latest typing is not yet secure on this device.";
+        "The verification code was not sent because your latest typing is not yet secure on this device.";
       setCaptureMessage(message);
       return { ok: false, message };
     }
@@ -2010,7 +2004,7 @@ export function App({ dependencies = {} }: AppProps) {
     }
 
     try {
-      await startEmailContinuation(
+      await requestOtp(
         email,
         {
           clientStoryId,
@@ -2019,17 +2013,42 @@ export function App({ dependencies = {} }: AppProps) {
         },
       );
       setCaptureMessage(
-        "A secure sign-in link has been sent. This story remains saved on this device until you return through the link.",
+        "A verification code has been sent. Enter it in this tab; this story remains saved on this device until the code is verified.",
       );
       return { ok: true };
     } catch {
       setPersistenceState("saved-locally");
       const message =
-        "The sign-in link could not be sent. This story remains saved on this device.";
+        "The verification code could not be sent. This story remains saved on this device.";
       setCaptureMessage(message);
       return { ok: false, message };
     }
-  }, [cloudConfigured, flushTextSave, phase, startEmailContinuation]);
+  }, [cloudConfigured, flushTextSave, phase, requestOtp]);
+
+  const handleVerifyEmailOtp = useCallback(async (
+    email: string,
+    code: string,
+  ): Promise<EmailOtpResult> => {
+    try {
+      const verifiedSession = await verifyOtp(email, code);
+      const nextSession = verifiedSession ?? (await readCurrentSession());
+      if (!nextSession) {
+        throw new Error("The verification completed without an account session.");
+      }
+      setPersistenceState("securing");
+      setCaptureMessage(
+        "Email verified. Securing this story in your private account…",
+      );
+      setSession(nextSession);
+      return { ok: true };
+    } catch {
+      setPersistenceState("saved-locally");
+      const message =
+        "That code is invalid or has expired. Check it or request a new code. Your story remains saved on this device.";
+      setCaptureMessage(message);
+      return { ok: false, message };
+    }
+  }, [readCurrentSession, verifyOtp]);
 
   const loadStoryLibrary = useCallback(async (): Promise<void> => {
     if (!session || !cloudConfigured) {
@@ -2718,7 +2737,8 @@ export function App({ dependencies = {} }: AppProps) {
         microphoneWarning={microphoneWarning}
         onConfirmMicrophone={() => void beginRecording()}
         onContentChange={handleContentChange}
-        onSendMagicLink={handleSendMagicLink}
+        onRequestEmailOtp={handleRequestEmailOtp}
+        onVerifyEmailOtp={handleVerifyEmailOtp}
         onConfirmDiscardRecoveredDraft={() =>
           void discardRecoveredGuestDraft()
         }

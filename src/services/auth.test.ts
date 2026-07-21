@@ -1,31 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  continueWithEmailMagicLink,
-  completeEmailMagicLinkReturn,
+  requestEmailOtp,
   storeAuthReturnContext,
   takeAuthReturnContext,
+  verifyEmailOtp,
   type AuthReturnContext,
 } from "./auth";
 
 interface SignInWithOtpRequest {
   readonly email: string;
   readonly options: {
-    readonly emailRedirectTo: string;
     readonly shouldCreateUser: boolean;
   };
 }
 
 interface VerifyOtpRequest {
-  readonly token_hash: string;
+  readonly email: string;
+  readonly token: string;
   readonly type: "email";
 }
 
 const mocks = vi.hoisted(() => ({
   signInWithOtp:
     vi.fn<(request: SignInWithOtpRequest) => Promise<{ error: Error | null }>>(),
-  verifyOtp:
-    vi.fn<(request: VerifyOtpRequest) => Promise<{ error: Error | null }>>(),
+  verifyOtp: vi.fn<
+    (request: VerifyOtpRequest) => Promise<{
+      data: { session: null };
+      error: Error | null;
+    }>
+  >(),
 }));
 
 vi.mock("../lib/supabase", () => ({
@@ -37,7 +41,6 @@ vi.mock("../lib/supabase", () => ({
   }),
 }));
 
-const ATTEMPT_ID = "1b3aaed2-8d55-4c67-8976-2a7ea2758a5c";
 const STORY_ID = "9d4f7ef3-b8b4-42a9-b7ca-68bff1fe315e";
 const context: AuthReturnContext = {
   clientStoryId: STORY_ID,
@@ -55,122 +58,79 @@ function storedKey(): string {
 
 beforeEach(() => {
   localStorage.clear();
-  window.history.replaceState({}, "", "/");
   mocks.signInWithOtp.mockReset();
   mocks.signInWithOtp.mockResolvedValue({ error: null });
   mocks.verifyOtp.mockReset();
-  mocks.verifyOtp.mockResolvedValue({ error: null });
+  mocks.verifyOtp.mockResolvedValue({ data: { session: null }, error: null });
 });
 
 afterEach(() => {
   localStorage.clear();
-  window.history.replaceState({}, "", "/");
 });
 
-describe("email magic-link authentication", () => {
-  it("requests a PKCE-compatible magic link without storing the email address", async () => {
-    await continueWithEmailMagicLink(" person@example.test ", context);
+describe("email OTP authentication", () => {
+  it("requests an OTP without a redirect or stored email address", async () => {
+    await requestEmailOtp(" person@example.test ", context);
 
-    expect(mocks.signInWithOtp).toHaveBeenCalledOnce();
-    const request = mocks.signInWithOtp.mock.calls[0]?.[0];
-    expect(request).toMatchObject({
+    expect(mocks.signInWithOtp).toHaveBeenCalledWith({
       email: "person@example.test",
       options: { shouldCreateUser: true },
     });
-    if (!request) {
-      throw new Error("Expected a passwordless email request.");
-    }
-    const redirectUrl = new URL(request.options.emailRedirectTo);
-    expect(redirectUrl.origin).toBe(window.location.origin);
-    expect(redirectUrl.pathname).toBe("/auth/confirm");
-    expect(redirectUrl.searchParams.get("auth_return")).toMatch(
-      /^[0-9a-f-]{36}$/,
-    );
     expect(localStorage.getItem(storedKey())).not.toContain(
       "person@example.test",
     );
   });
 
-  it("removes the pending return context when sending fails", async () => {
+  it("removes the pending story context when sending fails", async () => {
     mocks.signInWithOtp.mockResolvedValue({
       error: new Error("synthetic-send-failure"),
     });
 
     await expect(
-      continueWithEmailMagicLink("person@example.test", context),
+      requestEmailOtp("person@example.test", context),
     ).rejects.toThrow("synthetic-send-failure");
     expect(localStorage).toHaveLength(0);
   });
 
-  it("leaves callback context untouched in the original root tab", () => {
-    storeAuthReturnContext(context, ATTEMPT_ID);
-    window.history.replaceState(
-      {},
-      "",
-      `/?auth_return=${ATTEMPT_ID}`,
-    );
-
-    expect(takeAuthReturnContext()).toBeNull();
-    expect(localStorage).toHaveLength(1);
-  });
-
-  it("takes the matching callback context once in the magic-link tab", () => {
-    storeAuthReturnContext(context, ATTEMPT_ID);
-    window.history.replaceState(
-      {},
-      "",
-      `/auth/confirm?auth_return=${ATTEMPT_ID}`,
-    );
+  it("takes the same-tab story context once after authentication", () => {
+    storeAuthReturnContext(context);
 
     expect(takeAuthReturnContext()).toEqual(context);
     expect(takeAuthReturnContext()).toBeNull();
     expect(localStorage).toHaveLength(0);
   });
 
-  it("verifies the callback token hash and removes it from the browser URL", async () => {
-    window.history.replaceState(
-      {},
-      "",
-      `/auth/confirm?auth_return=${ATTEMPT_ID}&token_hash=synthetic-token-hash&type=email`,
-    );
-
-    await completeEmailMagicLinkReturn();
+  it("verifies the pasted email code and removes whitespace", async () => {
+    await expect(
+      verifyEmailOtp(" person@example.test ", " 123 456 "),
+    ).resolves.toBeNull();
 
     expect(mocks.verifyOtp).toHaveBeenCalledWith({
-      token_hash: "synthetic-token-hash",
+      email: "person@example.test",
+      token: "123456",
       type: "email",
     });
-    expect(window.location.pathname).toBe("/auth/confirm");
-    expect(window.location.search).toBe(`?auth_return=${ATTEMPT_ID}`);
   });
 
-  it("does not remove a failed or replayed callback token", async () => {
+  it("keeps the pending story context retryable after a failed code", async () => {
+    storeAuthReturnContext(context);
     mocks.verifyOtp.mockResolvedValue({
-      error: new Error("synthetic-invalid-token"),
+      data: { session: null },
+      error: new Error("synthetic-invalid-code"),
     });
-    window.history.replaceState(
-      {},
-      "",
-      `/auth/confirm?auth_return=${ATTEMPT_ID}&token_hash=synthetic-token-hash&type=email`,
-    );
 
-    await expect(completeEmailMagicLinkReturn()).rejects.toThrow(
-      "synthetic-invalid-token",
-    );
-    expect(window.location.search).toContain("token_hash=");
+    await expect(
+      verifyEmailOtp("person@example.test", "000000"),
+    ).rejects.toThrow("synthetic-invalid-code");
+    expect(takeAuthReturnContext()).toEqual(context);
   });
 
-  it("rejects expired callback context without exposing it to the app", () => {
-    storeAuthReturnContext(context, ATTEMPT_ID);
+  it("rejects expired story context without exposing it to the app", () => {
+    storeAuthReturnContext(context);
     const key = storedKey();
     localStorage.setItem(
       key,
       JSON.stringify({ context, expiresAt: Date.now() - 1 }),
-    );
-    window.history.replaceState(
-      {},
-      "",
-      `/auth/confirm?auth_return=${ATTEMPT_ID}`,
     );
 
     expect(takeAuthReturnContext()).toBeNull();

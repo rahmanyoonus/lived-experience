@@ -12,9 +12,9 @@
 
 **Product owner:** TBD
 
-**Hackathon authentication update (20 July 2026):** Passwordless email magic
-links replace Google OAuth as the only first-version sign-in method. Google
-OAuth is deferred.
+**Hackathon authentication update (22 July 2026):** A passwordless email
+one-time password (OTP) entered in the initiating browser tab replaces email
+magic links as the only first-version sign-in method. Google OAuth is deferred.
 
 > **Product promise:** A private, distraction-free place where people can speak or write their stories at their own pace, with their original voice faithfully preserved.
 
@@ -117,7 +117,7 @@ The primary user is the person telling their own story. They may be documenting 
 
 ### 3.1 MVP outcome
 
-A person can open the web application, capture a story through voice or writing without first creating an account, review and directly edit a faithful transcript, retain the draft locally, and use a passwordless email magic link once to preserve the story in their personal cloud library.
+A person can open the web application, capture a story through voice or writing without first creating an account, review and directly edit a faithful transcript, retain the draft locally, and enter a passwordless email OTP in the same browser tab to preserve the story in their personal cloud library.
 
 ### 3.2 Included capabilities
 
@@ -183,9 +183,9 @@ A person can open the web application, capture a story through voice or writing 
 
 6. **Retain locally.** The story is already temporarily autosaved in the current browser and clearly labelled as device-only.
 
-7. **Keep.** A non-blocking Keep this story action asks for an email address and offers Email me a sign-in link. The prompt does not interrupt an active capture, and the person can keep working locally after requesting the link.
+7. **Keep.** A non-blocking Keep this story action asks for an email address and offers Email me a code. The prompt does not interrupt an active capture, and the person can keep working locally after requesting the code.
 
-8. **Authenticate.** After the passwordless link returns to the same supported browser and device, the same story remains open and is transferred to cloud autosave without duplication or lost edits. A link opened elsewhere must not delete or falsely cloud-save the original device-only draft.
+8. **Authenticate.** The person copies the email OTP into the tab where the story is open. After successful verification, the same story remains open and transfers to cloud autosave without duplication, lost edits, refresh, or unexpected navigation. A code entered elsewhere must not delete or falsely cloud-save the original device-only draft.
 
 ### 4.2 Returning authenticated capture
 
@@ -273,7 +273,7 @@ Account and settings controls remain secondary. There is no dashboard, progress 
 | **Recording** | Calm canvas; no live transcript or reactive audio visualisation. A minimal muted sine wave confirms that capture is active beside the Listening state and elapsed time. | Stop the spoken segment. |
 | **Processing** | Recording is secure; transcript is being prepared. Editing controls remain stable. | Wait, type elsewhere if safe, or retry after an error. |
 | **Editing** | Faithful transcript appears in the canvas and can be directly edited. | Type, record more, undo, or leave. |
-| **Guest retained** | Device-only status and Keep this story action remain visible but non-blocking. | Email a sign-in link or keep working locally. |
+| **Guest retained** | Device-only status and Keep this story action remain visible but non-blocking. | Email a verification code or keep working locally. |
 | **Offline** | Local buffering and clear status prevent false confirmation of cloud save. | Continue where supported; sync when connection returns. |
 
 ### 5.4 Story library
@@ -365,11 +365,11 @@ After capture, AI may generate a short, descriptive title for the library card. 
 
 - Once content exists, a non-blocking Keep this story action becomes available.
 
-- Selecting the action reveals an email field and Email me a sign-in link as the only first-version sign-in method.
+- Selecting the action reveals an email field and Email me a code as the only first-version sign-in method.
 
-- After a link is requested, the interface shows Check your email without claiming that the story is cloud-saved or blocking continued local editing.
+- After a code is requested, the interface keeps the verification form in the same tab and shows Check your email without claiming that the story is cloud-saved or blocking continued local editing.
 
-- Sign-in must return the user to the same story and cursor context where practical.
+- Successful code verification must preserve the same story, cursor context, and browser tab without unexpected navigation.
 
 - The application must explain that an unsigned story is stored only on the current device and is not yet available elsewhere.
 
@@ -621,7 +621,7 @@ The remaining launch decisions are:
 
 1. **Prototype the capture canvas.** Create low-fidelity desktop and mobile-width web flows for empty, recording, processing, editing, guest-retained, and offline states.
 
-2. **Test the core interaction.** Run moderated sessions focused on starting, calm recording feedback, transcript review, and guest-to-account retention through email magic links.
+2. **Test the core interaction.** Run moderated sessions focused on starting, calm recording feedback, transcript review, and same-tab guest-to-account retention through email OTP.
 
 3. **Select architecture.** Evaluate browser recording reliability, local persistence, secure cloud storage, transcription quality, and authentication continuity.
 

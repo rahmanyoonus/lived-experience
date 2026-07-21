@@ -26,14 +26,15 @@ decisions.
   migrations are applied, the live schema passes linting, and the browser
   configuration is connected. The Atomik Cloudflare Worker, required secrets,
   `aws:us-east-1` placement, and a synthetic Worker-to-OpenAI transcription are
-  live and verified. Passwordless email magic links are selected for the
+  live and verified. Passwordless email OTP is selected for the
   hackathon. Resend custom SMTP is active through the verified
-  `email.atomik.bn` domain, and the hosted token-hash template is configured,
-  and the synthetic text guest-to-cloud flow is verified through live Gmail
-  delivery, callback, cloud save, reload, and private-library retrieval. The
-  authenticated original-audio guest-to-cloud path is live-verified in desktop
-  Chrome through upload, cloud acknowledgement, reload, and private-library
-  recovery. One-off **Guide me with a prompt** guidance is deployed and
+  `email.atomik.bn` domain, the hosted six-digit OTP template is configured,
+  and the same-tab OTP application flow is deployed. The earlier synthetic
+  text and original-audio guest-to-cloud paths were live-verified through the
+  superseded magic-link callback. A fresh live Gmail OTP delivery, same-tab
+  verification, cloud save, reload, and private-library recovery remains to be
+  confirmed before describing the OTP flow as live-verified. One-off **Guide
+  me with a prompt** guidance is deployed and
   live-verified with both empty and clearly fictional current-story requests;
   **Interview me** remains disabled. Do not imply that another unverified
   adapter or flow is live.
@@ -87,8 +88,8 @@ All implementation work must preserve these decisions:
 - Autosave continuously. Guest work is stored locally and labelled as
   device-only; authenticated work is cloud-saved with truthful status.
 - Offer a non-blocking **Keep this story** action after content exists.
-  Passwordless email magic links are the only hackathon first-version sign-in
-  method; Google OAuth is deferred.
+  Passwordless email OTP entered in the initiating browser tab is the only
+  hackathon first-version sign-in method; Google OAuth is deferred.
 - Transfer the active guest story through authentication without refresh-related
   loss, duplication, or unexpected navigation.
 - Make use of previous stories during guidance explicit and user-controlled.

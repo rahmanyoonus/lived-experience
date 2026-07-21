@@ -12,11 +12,14 @@ coverage. The selected live Supabase target is `LivedExp`; migrations, schema
 linting, and browser configuration are verified. The Atomik Cloudflare Worker
 and Static Assets are live, both Worker secrets are configured, and a synthetic
 WebM has completed the deployed US-East OpenAI transcription path. Passwordless
-email magic links are implemented. Resend custom SMTP is active through the
-verified `email.atomik.bn` domain, and the hosted token-hash template is saved.
-The authenticated guest-to-cloud flow is verified end to end with synthetic
-text and original audio through live Gmail delivery, callback, cloud save,
-reload, and private-library retrieval.
+email OTP is implemented. Resend custom SMTP is active through the verified
+`email.atomik.bn` domain; the sign-in template sends a six-digit code for entry
+in the initiating story tab. The application and hosted template are deployed.
+The earlier authenticated guest-to-cloud flow was verified end to end with
+synthetic text and original audio through the superseded magic-link callback.
+A fresh live Gmail OTP delivery, same-tab verification, cloud save, reload, and
+private-library retrieval still needs confirmation before the OTP flow is
+called live-verified.
 
 Read the [product requirements](./Lived_Experience_PRD_v0.1.md) before making
 product or implementation decisions. The technical boundary is recorded in
@@ -24,8 +27,8 @@ product or implementation decisions. The technical boundary is recorded in
 provider-gated OpenAI transcription decision is recorded in
 [ADR 0002](./docs/decisions/0002-openai-transcription-boundary.md). The
 approved US-East Worker placement is recorded in
-[ADR 0004](./docs/decisions/0004-cloudflare-api-placement.md). The hackathon
-passwordless-email decision is recorded in
+[ADR 0004](./docs/decisions/0004-cloudflare-api-placement.md). The superseded
+magic-link decision is recorded in
 [ADR 0005](./docs/decisions/0005-passwordless-email-authentication.md). The
 failure-only capture readiness policy is recorded in
 [ADR 0006](./docs/decisions/0006-capture-readiness-and-degraded-operation.md).
@@ -33,6 +36,8 @@ The one-off optional prompt boundary is recorded in
 [ADR 0007](./docs/decisions/0007-one-off-prompt-guidance.md).
 The private non-chronological story visualisation is recorded in
 [ADR 0008](./docs/decisions/0008-private-non-chronological-story-visualisation.md).
+The same-tab email OTP decision is recorded in
+[ADR 0009](./docs/decisions/0009-same-tab-email-otp.md).
 
 ## Current architecture
 
@@ -242,14 +247,12 @@ supabase db reset --local --no-seed --yes
 The local API uses `http://127.0.0.1:56321` and Studio uses
 `http://127.0.0.1:56323`. Configure the browser with the local publishable key
 reported by `supabase status`; do not use or expose the reported secret key.
-Local magic-link emails are captured by the local Supabase mail viewer. The
-committed callback is
-`http://127.0.0.1:5173/auth/confirm?auth_return=*`; the hosted project allows
-the canonical `https://livedexp.atomik.bn/auth/confirm?auth_return=*`, retains
-the former Worker callback pattern as a fallback, and uses the committed
-token-hash magic-link template. The query-aware allowlist is required because
-each request carries a random return identifier for reconnecting the email tab
-to the correct device-only draft.
+Local email OTP messages are captured by the local Supabase mail viewer. The
+committed template uses `{{ .Token }}` and the app verifies the six-digit code
+with the email address in the same browser tab. No authentication callback or
+redirect allowlist is required for this flow. Only the story identifier, cursor
+range, and one-hour expiry are retained locally while verification is pending;
+the email address stays in dialog memory.
 
 ## Development
 

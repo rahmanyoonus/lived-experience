@@ -120,7 +120,6 @@ describe("App capture integration", () => {
         dependencies={{
           persistence,
           isCloudConfigured: () => true,
-          completeEmailMagicLinkReturn: () => Promise.resolve(),
           getCurrentSession: () => Promise.resolve(null),
           onAuthStateChange: () => () => undefined,
           checkDeviceReadiness: () => Promise.resolve({ status: "ready" }),
@@ -801,7 +800,7 @@ describe("App capture integration", () => {
     await expect(persistence.recoverGuestDraft()).resolves.toBeNull();
   });
 
-  it("does not start recording or send a sign-in link until the latest typing is saved locally", async () => {
+  it("does not start recording or send an OTP until the latest typing is saved locally", async () => {
     const user = userEvent.setup();
     const persistence = testPersistence();
     const start = vi.fn().mockResolvedValue("audio/webm");
@@ -817,7 +816,8 @@ describe("App capture integration", () => {
           isCloudConfigured: () => true,
           getCurrentSession: () => Promise.resolve(null),
           onAuthStateChange: () => () => undefined,
-          continueWithEmailMagicLink: vi.fn(),
+          requestEmailOtp: vi.fn(),
+          verifyEmailOtp: vi.fn(),
         }}
       />,
     );
@@ -846,21 +846,21 @@ describe("App capture integration", () => {
       "person@example.test",
     );
     await user.click(
-      screen.getByRole("button", { name: "Email me a link" }),
+      screen.getByRole("button", { name: "Email me a code" }),
     );
 
     expect(
       await screen.findAllByText(
-        "The sign-in link was not sent because your latest typing is not yet secure on this device.",
+        "The verification code was not sent because your latest typing is not yet secure on this device.",
       ),
     ).not.toHaveLength(0);
     expect(start).not.toHaveBeenCalled();
   });
 
-  it("sends a magic link only after local save and keeps the status device-only", async () => {
+  it("sends an OTP only after local save and keeps the status device-only", async () => {
     const user = userEvent.setup();
     const persistence = testPersistence();
-    const sendMagicLink = vi
+    const requestOtp = vi
       .fn<(email: string, context: AuthReturnContext) => Promise<void>>()
       .mockResolvedValue(undefined);
 
@@ -871,7 +871,8 @@ describe("App capture integration", () => {
           isCloudConfigured: () => true,
           getCurrentSession: () => Promise.resolve(null),
           onAuthStateChange: () => () => undefined,
-          continueWithEmailMagicLink: sendMagicLink,
+          requestEmailOtp: requestOtp,
+          verifyEmailOtp: vi.fn(),
         }}
       />,
     );
@@ -888,11 +889,11 @@ describe("App capture integration", () => {
       "person@example.test",
     );
     await user.click(
-      screen.getByRole("button", { name: "Email me a link" }),
+      screen.getByRole("button", { name: "Email me a code" }),
     );
 
-    await waitFor(() => expect(sendMagicLink).toHaveBeenCalledOnce());
-    const request = sendMagicLink.mock.calls[0];
+    await waitFor(() => expect(requestOtp).toHaveBeenCalledOnce());
+    const request = requestOtp.mock.calls[0];
     expect(request?.[0]).toBe("person@example.test");
     expect(request?.[1]).toMatchObject({
       selectionStart: 45,
@@ -904,6 +905,100 @@ describe("App capture integration", () => {
     expect(await screen.findByText(/check your email/i)).toBeInTheDocument();
     expect(screen.getByText("Saved locally")).toBeInTheDocument();
     expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+  });
+
+  it("verifies an OTP in the same tab and starts the matching cloud migration", async () => {
+    const user = userEvent.setup();
+    const persistence = testPersistence();
+    const ownerId = crypto.randomUUID();
+    const storyId = crypto.randomUUID();
+    const text = "A synthetic same-tab story about a cedar writing desk.";
+    let pendingContext: AuthReturnContext | null = null;
+    const requestOtp = vi.fn(
+      (_email: string, context: AuthReturnContext) => {
+        pendingContext = context;
+        return Promise.resolve();
+      },
+    );
+    const verifyOtp = vi
+      .fn<(email: string, code: string) => Promise<Session | null>>()
+      .mockResolvedValue({ user: { id: ownerId } } as Session);
+    const synchronise = vi.fn(
+      async (localPersistence: GuestPersistence) => {
+        const active = await localPersistence.recoverGuestDraft();
+        if (!active) {
+          return null;
+        }
+        if (!active.migration_receipt) {
+          const migration = await localPersistence.beginMigration();
+          await localPersistence.markMigration({
+            owner_id: ownerId,
+            story_id: storyId,
+            idempotency_key: migration.value.idempotency_key,
+            payload_generation: migration.value.payload_generation,
+            cloud_revision: 1,
+            cloud_version_id: null,
+          });
+        }
+        return {
+          storyId,
+          ownerId,
+          acknowledgedGeneration:
+            (await localPersistence.getMigrationOutbox())
+              ?.cloud_synced_generation ?? 0,
+          fullySynced: true,
+        };
+      },
+    );
+
+    render(
+      <App
+        dependencies={{
+          persistence,
+          createCloudPersistence: () => ({}) as CloudPersistence,
+          getCurrentSession: () => Promise.resolve(null),
+          isCloudConfigured: () => true,
+          onAuthStateChange: () => () => undefined,
+          requestEmailOtp: requestOtp,
+          verifyEmailOtp: verifyOtp,
+          synchroniseActiveStory: synchronise,
+          takeAuthReturnContext: () => {
+            const context = pendingContext;
+            pendingContext = null;
+            return context;
+          },
+        }}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox", {
+      name: "Write or edit your story",
+    });
+    await user.type(editor, text);
+    await screen.findByText("Saved locally");
+    await user.click(screen.getByRole("button", { name: "Keep this story" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Email address" }),
+      "person@example.test",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Email me a code" }),
+    );
+    await user.type(
+      await screen.findByRole("textbox", { name: "Verification code" }),
+      "123456",
+    );
+    await user.click(screen.getByRole("button", { name: "Verify code" }));
+
+    await waitFor(() =>
+      expect(verifyOtp).toHaveBeenCalledWith(
+        "person@example.test",
+        "123456",
+      ),
+    );
+    await waitFor(() => expect(synchronise).toHaveBeenCalled());
+    expect(editor).toHaveValue(text);
+    expect(window.location.pathname).toBe("/");
   });
 
   it("keeps a failed transcript retryable until the user keeps only the audio", async () => {
@@ -1396,7 +1491,7 @@ describe("App capture integration", () => {
     expect(await persistence.recoverGuestDraft()).toBeNull();
   });
 
-  it("keeps and migrates the active guest story on its matching email magic-link return", async () => {
+  it("keeps and migrates the active guest story after matching same-tab email OTP verification", async () => {
     const persistence = testPersistence();
     const text = "A fictional cartographer kept the name of an amber island.";
     const local = await persistence.saveText({ current_text: text });

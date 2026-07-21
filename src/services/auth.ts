@@ -2,9 +2,7 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 import { requireSupabaseClient } from "../lib/supabase";
 
-const AUTH_RETURN_CONTEXT_KEY_PREFIX =
-  "lived-experience.auth-return-context.v2";
-const AUTH_RETURN_PARAM = "auth_return";
+const EMAIL_OTP_CONTEXT_KEY = "lived-experience.email-otp-context.v3";
 const AUTH_RETURN_TTL_MS = 60 * 60 * 1_000;
 
 export interface AuthReturnContext {
@@ -18,36 +16,19 @@ interface StoredAuthReturnContext {
   expiresAt: number;
 }
 
-function authReturnKey(attemptId: string): string {
-  return `${AUTH_RETURN_CONTEXT_KEY_PREFIX}.${attemptId}`;
-}
-
 export function storeAuthReturnContext(
   context: AuthReturnContext,
-  attemptId = crypto.randomUUID(),
-): string {
+): void {
   const stored: StoredAuthReturnContext = {
     context,
     expiresAt: Date.now() + AUTH_RETURN_TTL_MS,
   };
-  localStorage.setItem(authReturnKey(attemptId), JSON.stringify(stored));
-  return attemptId;
+  localStorage.setItem(EMAIL_OTP_CONTEXT_KEY, JSON.stringify(stored));
 }
 
 export function takeAuthReturnContext(): AuthReturnContext | null {
-  if (window.location.pathname !== "/auth/confirm") {
-    return null;
-  }
-  const attemptId = new URL(window.location.href).searchParams.get(
-    AUTH_RETURN_PARAM,
-  );
-  if (!attemptId || !/^[0-9a-f-]{36}$/i.test(attemptId)) {
-    return null;
-  }
-
-  const key = authReturnKey(attemptId);
-  const encoded = localStorage.getItem(key);
-  localStorage.removeItem(key);
+  const encoded = localStorage.getItem(EMAIL_OTP_CONTEXT_KEY);
+  localStorage.removeItem(EMAIL_OTP_CONTEXT_KEY);
   if (!encoded) {
     return null;
   }
@@ -90,56 +71,39 @@ export function takeAuthReturnContext(): AuthReturnContext | null {
   return null;
 }
 
-export async function continueWithEmailMagicLink(
+export async function requestEmailOtp(
   email: string,
   context: AuthReturnContext,
 ): Promise<void> {
-  const attemptId = storeAuthReturnContext(context);
-  const redirectUrl = new URL("/auth/confirm", window.location.origin);
-  redirectUrl.searchParams.set(AUTH_RETURN_PARAM, attemptId);
+  storeAuthReturnContext(context);
   const supabase = requireSupabaseClient();
   const { error } = await supabase.auth.signInWithOtp({
     email: email.trim(),
     options: {
-      emailRedirectTo: redirectUrl.toString(),
       shouldCreateUser: true,
     },
   });
 
   if (error) {
-    localStorage.removeItem(authReturnKey(attemptId));
+    localStorage.removeItem(EMAIL_OTP_CONTEXT_KEY);
     throw error;
   }
 }
 
-export async function completeEmailMagicLinkReturn(): Promise<void> {
-  if (window.location.pathname !== "/auth/confirm") {
-    return;
-  }
-
-  const url = new URL(window.location.href);
-  const tokenHash = url.searchParams.get("token_hash");
-  const type = url.searchParams.get("type");
-  if (!tokenHash || type !== "email") {
-    throw new Error("The email sign-in link is invalid or incomplete.");
-  }
-
+export async function verifyEmailOtp(
+  email: string,
+  token: string,
+): Promise<Session | null> {
   const supabase = requireSupabaseClient();
-  const { error } = await supabase.auth.verifyOtp({
-    token_hash: tokenHash,
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: email.trim(),
+    token: token.replace(/\s/g, ""),
     type: "email",
   });
   if (error) {
     throw error;
   }
-
-  url.searchParams.delete("token_hash");
-  url.searchParams.delete("type");
-  window.history.replaceState(
-    window.history.state,
-    "",
-    `${url.pathname}${url.search}${url.hash}`,
-  );
+  return data.session;
 }
 
 export async function getCurrentSession(): Promise<Session | null> {

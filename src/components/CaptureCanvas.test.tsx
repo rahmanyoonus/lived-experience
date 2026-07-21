@@ -634,16 +634,18 @@ describe("CaptureCanvas", () => {
     expect(onConfirmMicrophone).toHaveBeenCalledOnce();
   });
 
-  it("offers passwordless email continuation without hiding the active story", async () => {
+  it("offers same-tab email OTP continuation without hiding the active story", async () => {
     const user = userEvent.setup();
-    const onSendMagicLink = vi.fn().mockResolvedValue({ ok: true });
+    const onRequestEmailOtp = vi.fn().mockResolvedValue({ ok: true });
+    const onVerifyEmailOtp = vi.fn().mockResolvedValue({ ok: true });
     render(
       <CaptureCanvas
         {...makeProps({
           content: "A fictional afternoon by the sea.",
           emailDialogOpen: true,
           hasStarted: true,
-          onSendMagicLink,
+          onRequestEmailOtp,
+          onVerifyEmailOtp,
           onDismissEmailDialog: vi.fn(),
         })}
       />,
@@ -652,19 +654,35 @@ describe("CaptureCanvas", () => {
     expect(
       screen.getByRole("textbox", { name: "Write or edit your story" }),
     ).toHaveValue("A fictional afternoon by the sea.");
-    expect(
-      screen.getByRole("dialog", { name: "Keep this story" }),
-    ).toHaveTextContent("saved only in this browser on this device");
+    const emailDialog = screen.getByRole("dialog", { name: "Keep this story" });
+    expect(emailDialog).toHaveTextContent(
+      "saved only in this browser on this device",
+    );
+    expect(emailDialog).toHaveTextContent("We’ll email you a six-digit code");
+    expect(emailDialog).not.toHaveTextContent(/\blink\b/i);
 
     await user.type(
       screen.getByRole("textbox", { name: "Email address" }),
       "person@example.test",
     );
     await user.click(
-      screen.getByRole("button", { name: "Email me a link" }),
+      screen.getByRole("button", { name: "Email me a code" }),
     );
-    expect(onSendMagicLink).toHaveBeenCalledWith("person@example.test");
+    expect(onRequestEmailOtp).toHaveBeenCalledWith("person@example.test");
     expect(await screen.findByText(/check your email/i)).toBeInTheDocument();
+    expect(emailDialog).toHaveTextContent(
+      "Enter the verification code sent to person@example.test in this tab",
+    );
+    expect(emailDialog).not.toHaveTextContent(/\blink\b/i);
+    await user.type(
+      screen.getByRole("textbox", { name: "Verification code" }),
+      "123456",
+    );
+    await user.click(screen.getByRole("button", { name: "Verify code" }));
+    expect(onVerifyEmailOtp).toHaveBeenCalledWith(
+      "person@example.test",
+      "123456",
+    );
   });
 
   it("discloses when email continuation is not configured", () => {
@@ -675,7 +693,8 @@ describe("CaptureCanvas", () => {
           emailSignInAvailable: false,
           emailDialogOpen: true,
           hasStarted: true,
-          onSendMagicLink: vi.fn(),
+          onRequestEmailOtp: vi.fn(),
+          onVerifyEmailOtp: vi.fn(),
           onDismissEmailDialog: vi.fn(),
           onKeepStory: vi.fn(),
         })}

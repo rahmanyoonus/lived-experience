@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { DiscardDraftDialog } from "./DiscardDraftDialog";
 import {
   EmailContinuationDialog,
-  type MagicLinkRequestResult,
+  type EmailOtpResult,
 } from "./EmailContinuationDialog";
 import {
   MicrophoneDialog,
@@ -87,7 +87,11 @@ export interface CaptureCanvasProps {
   startNewStoryDisabled?: boolean;
   onSyncNow?: () => void;
   onKeepStory?: () => void;
-  onSendMagicLink?: (email: string) => Promise<MagicLinkRequestResult>;
+  onRequestEmailOtp?: (email: string) => Promise<EmailOtpResult>;
+  onVerifyEmailOtp?: (
+    email: string,
+    code: string,
+  ) => Promise<EmailOtpResult>;
   onDismissEmailDialog?: () => void;
   onConfirmMicrophone?: () => void;
   onDismissMicrophone?: () => void;
@@ -586,7 +590,8 @@ export function CaptureCanvas({
   startNewStoryDisabled = false,
   onSyncNow,
   onKeepStory,
-  onSendMagicLink,
+  onRequestEmailOtp,
+  onVerifyEmailOtp,
   onDismissEmailDialog,
   onConfirmMicrophone,
   onDismissMicrophone,
@@ -1227,12 +1232,14 @@ export function CaptureCanvas({
       ) : null}
 
       {emailDialogOpen &&
-      onSendMagicLink &&
+      onRequestEmailOtp &&
+      onVerifyEmailOtp &&
       onDismissEmailDialog ? (
         <EmailContinuationDialog
           available={emailSignInAvailable}
           onDismiss={onDismissEmailDialog}
-          onSendLink={onSendMagicLink}
+          onRequestCode={onRequestEmailOtp}
+          onVerifyCode={onVerifyEmailOtp}
         />
       ) : null}
 

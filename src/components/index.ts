@@ -11,7 +11,7 @@ export {
 export {
   EmailContinuationDialog,
   type EmailContinuationDialogProps,
-  type MagicLinkRequestResult,
+  type EmailOtpResult,
 } from "./EmailContinuationDialog";
 export {
   DiscardDraftDialog,
