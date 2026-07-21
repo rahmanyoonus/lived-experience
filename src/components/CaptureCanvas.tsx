@@ -3,6 +3,7 @@ import type {
   MouseEventHandler,
   SyntheticEvent,
 } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { DiscardDraftDialog } from "./DiscardDraftDialog";
 import {
@@ -45,6 +46,12 @@ export interface CaptureReadinessNotice {
   readonly tone: "blocking" | "warning";
 }
 
+export type GuidancePromptState =
+  | { readonly status: "idle" }
+  | { readonly status: "loading" }
+  | { readonly status: "ready"; readonly prompt: string }
+  | { readonly status: "error"; readonly message: string };
+
 export interface CaptureCanvasProps {
   content: string;
   phase: CapturePhase;
@@ -64,6 +71,7 @@ export interface CaptureCanvasProps {
   hasOriginalTranscript?: boolean;
   hasPendingRecording?: boolean;
   hasVersionHistory?: boolean;
+  guidancePromptState?: GuidancePromptState;
   onContentChange: (content: string) => void;
   onEditorSelectionChange?: (selection: EditorSelection) => void;
   onStartRecording: () => void;
@@ -84,11 +92,13 @@ export interface CaptureCanvasProps {
   onConfirmMicrophone?: () => void;
   onDismissMicrophone?: () => void;
   onOpenStories?: () => void;
+  onOpenStoryVisualisation?: () => void;
   onOpenOriginalAudio?: () => void;
   onOpenOriginalTranscript?: () => void;
   onOpenVersionHistory?: () => void;
-  onGuideMe?: () => void;
-  onGivePrompt?: () => void;
+  onInterviewMe?: () => void;
+  onRequestPrompt?: () => void;
+  onDismissPrompt?: () => void;
 }
 
 interface StatusPresentation {
@@ -269,13 +279,17 @@ function PersistenceStatus({
 }
 
 interface CaptureModeControlsProps {
-  onGuideMe?: () => void;
-  onGivePrompt?: () => void;
+  onInterviewMe?: () => void;
+  onRequestPrompt?: () => void;
+  promptBusy: boolean;
+  promptDisabled: boolean;
 }
 
 function CaptureModeControls({
-  onGuideMe,
-  onGivePrompt,
+  onInterviewMe,
+  onRequestPrompt,
+  promptBusy,
+  promptDisabled,
 }: CaptureModeControlsProps) {
   return (
     <div
@@ -292,35 +306,130 @@ function CaptureModeControls({
         <span className="mode-control__meta">On</span>
       </button>
       <button
-        aria-describedby={!onGuideMe ? "guide-unavailable" : undefined}
+        aria-describedby={!onInterviewMe ? "interview-unavailable" : undefined}
         aria-pressed="false"
         className="mode-control"
-        disabled={!onGuideMe}
-        onClick={onGuideMe}
+        disabled={!onInterviewMe}
+        onClick={onInterviewMe}
         type="button"
       >
-        <span>Guide me</span>
-        {!onGuideMe ? (
-          <span className="mode-control__meta" id="guide-unavailable">
+        <span>Interview me</span>
+        {!onInterviewMe ? (
+          <span className="mode-control__meta" id="interview-unavailable">
             Not yet available
           </span>
         ) : null}
       </button>
       <button
-        aria-describedby={!onGivePrompt ? "prompt-unavailable" : undefined}
+        aria-busy={promptBusy}
+        aria-describedby={!onRequestPrompt ? "prompt-unavailable" : undefined}
         className="mode-control"
-        disabled={!onGivePrompt}
-        onClick={onGivePrompt}
+        disabled={!onRequestPrompt || promptBusy || promptDisabled}
+        onClick={onRequestPrompt}
         type="button"
       >
-        <span>Give me a prompt</span>
-        {!onGivePrompt ? (
+        <span>{promptBusy ? "Finding a prompt…" : "Guide me with a prompt"}</span>
+        {!onRequestPrompt ? (
           <span className="mode-control__meta" id="prompt-unavailable">
             Not yet available
           </span>
         ) : null}
       </button>
     </div>
+  );
+}
+
+function GuidancePromptPanel({
+  state,
+  onRequestPrompt,
+  onDismissPrompt,
+  requestDisabled,
+}: {
+  state: GuidancePromptState;
+  onRequestPrompt?: () => void;
+  onDismissPrompt?: () => void;
+  requestDisabled: boolean;
+}) {
+  if (state.status === "idle") {
+    return null;
+  }
+  if (state.status === "loading") {
+    return (
+      <div
+        aria-atomic="true"
+        aria-label="Prompt guidance"
+        aria-live="polite"
+        className="guidance-prompt guidance-prompt--loading"
+        role="status"
+      >
+        <span aria-hidden="true" className="guidance-prompt__mark">·</span>
+        <span>Finding a prompt…</span>
+      </div>
+    );
+  }
+  if (state.status === "error") {
+    return (
+      <div className="guidance-prompt guidance-prompt--error" role="alert">
+        <p>{state.message}</p>
+        <div className="guidance-prompt__actions">
+          {onRequestPrompt ? (
+            <button
+              className="text-action"
+              disabled={requestDisabled}
+              onClick={onRequestPrompt}
+              type="button"
+            >
+              Try again
+            </button>
+          ) : null}
+          {onDismissPrompt ? (
+            <button
+              className="text-action"
+              onClick={onDismissPrompt}
+              type="button"
+            >
+              Dismiss
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <aside
+      aria-atomic="true"
+      aria-label="Prompt guidance"
+      aria-live="polite"
+      className="guidance-prompt"
+      role="status"
+    >
+      <p className="guidance-prompt__eyebrow">A prompt for you</p>
+      <p className="guidance-prompt__question">{state.prompt}</p>
+      <p className="guidance-prompt__note">
+        Use it if it helps, or carry on in your own direction.
+      </p>
+      <div className="guidance-prompt__actions">
+        {onRequestPrompt ? (
+          <button
+            className="text-action"
+            disabled={requestDisabled}
+            onClick={onRequestPrompt}
+            type="button"
+          >
+            Another prompt
+          </button>
+        ) : null}
+        {onDismissPrompt ? (
+          <button
+            className="text-action"
+            onClick={onDismissPrompt}
+            type="button"
+          >
+            Dismiss
+          </button>
+        ) : null}
+      </div>
+    </aside>
   );
 }
 
@@ -407,6 +516,7 @@ export function CaptureCanvas({
   hasOriginalTranscript = false,
   hasPendingRecording = false,
   hasVersionHistory = false,
+  guidancePromptState = { status: "idle" },
   onContentChange,
   onEditorSelectionChange,
   onStartRecording,
@@ -427,12 +537,18 @@ export function CaptureCanvas({
   onConfirmMicrophone,
   onDismissMicrophone,
   onOpenStories,
+  onOpenStoryVisualisation,
   onOpenOriginalAudio,
   onOpenOriginalTranscript,
   onOpenVersionHistory,
-  onGuideMe,
-  onGivePrompt,
+  onInterviewMe,
+  onRequestPrompt,
+  onDismissPrompt,
 }: CaptureCanvasProps) {
+  const [isFlowMode, setIsFlowMode] = useState(false);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const flowModeButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreFlowModeButtonFocusRef = useRef(false);
   const isRecording = phase === "recording";
   const isProcessing = phase === "processing";
   const canKeepStory = hasStarted && !isAuthenticated && Boolean(onKeepStory);
@@ -442,6 +558,25 @@ export function CaptureCanvas({
     content.length === 0 &&
     !isRecording &&
     !isProcessing;
+  const promptRequestDisabled = captureDisabled || isRecording || isProcessing;
+  const flowModeDisabled = captureDisabled || isRecording || isProcessing;
+
+  useEffect(() => {
+    if (isFlowMode) {
+      editorRef.current?.focus();
+      return;
+    }
+
+    if (restoreFlowModeButtonFocusRef.current) {
+      restoreFlowModeButtonFocusRef.current = false;
+      flowModeButtonRef.current?.focus();
+    }
+  }, [isFlowMode]);
+
+  const exitFlowMode = () => {
+    restoreFlowModeButtonFocusRef.current = true;
+    setIsFlowMode(false);
+  };
 
   const handleContentChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     onContentChange(event.currentTarget.value);
@@ -465,12 +600,22 @@ export function CaptureCanvas({
     : onStartRecording;
 
   return (
-    <div className="app-shell">
-      <a className="skip-link" href="#story-editor">
-        Skip to your story
-      </a>
+    <div
+      className={isFlowMode ? "app-shell app-shell--flow-mode" : "app-shell"}
+      onKeyDown={(event) => {
+        if (isFlowMode && event.key === "Escape") {
+          event.preventDefault();
+          exitFlowMode();
+        }
+      }}
+    >
+      {!isFlowMode ? (
+        <a className="skip-link" href="#story-editor">
+          Skip to your story
+        </a>
+      ) : null}
 
-      <header className="site-header">
+      {!isFlowMode ? <header className="site-header">
         <div className="site-header__inner">
           <div aria-label="Lived Experience" className="wordmark">
             Lived Experience
@@ -495,14 +640,25 @@ export function CaptureCanvas({
               </span>
             )}
             {isAuthenticated ? (
-              <button
-                className="navigation-tab"
-                disabled={!onOpenStories}
-                onClick={onOpenStories}
-                type="button"
-              >
-                Your stories
-              </button>
+              <>
+                <button
+                  className="navigation-tab"
+                  disabled={!onOpenStories}
+                  onClick={onOpenStories}
+                  type="button"
+                >
+                  Your stories
+                </button>
+                <button
+                  className="navigation-tab"
+                  data-visualise-stories-trigger
+                  disabled={!onOpenStoryVisualisation}
+                  onClick={onOpenStoryVisualisation}
+                  type="button"
+                >
+                  Visualise my stories
+                </button>
+              </>
             ) : null}
           </nav>
           <div className="site-header__status">
@@ -512,11 +668,24 @@ export function CaptureCanvas({
             />
           </div>
         </div>
-      </header>
+      </header> : null}
 
-      <main className="capture-layout">
-        <section aria-labelledby="capture-heading" className="capture-canvas">
-          {!hasStarted ? (
+      <main
+        className={
+          isFlowMode
+            ? "capture-layout capture-layout--flow-mode"
+            : "capture-layout"
+        }
+      >
+        <section
+          aria-labelledby="capture-heading"
+          className={
+            isFlowMode
+              ? "capture-canvas capture-canvas--flow-mode"
+              : "capture-canvas"
+          }
+        >
+          {!isFlowMode && !hasStarted ? (
             <div className="capture-canvas__introduction">
               <h1 id="capture-heading">
                 Welcome, Please start whenever you’re ready.
@@ -538,19 +707,39 @@ export function CaptureCanvas({
             </div>
           ) : (
             <h1 className="visually-hidden" id="capture-heading">
-              Your story
+              {isFlowMode ? "Your story in Flow Mode" : "Your story"}
             </h1>
           )}
 
-          <div className="capture-workspace">
+          <div
+            className={
+              isFlowMode
+                ? "capture-workspace capture-workspace--flow-mode"
+                : "capture-workspace"
+            }
+          >
 
-                <CaptureModeControls
-                  onGivePrompt={onGivePrompt}
-                  onGuideMe={onGuideMe}
-                />
+                {!isFlowMode ? <CaptureModeControls
+                  onInterviewMe={onInterviewMe}
+                  onRequestPrompt={onRequestPrompt}
+                  promptBusy={guidancePromptState.status === "loading"}
+                  promptDisabled={promptRequestDisabled}
+                /> : null}
+                {!isFlowMode ? <GuidancePromptPanel
+                  onDismissPrompt={onDismissPrompt}
+                  onRequestPrompt={onRequestPrompt}
+                  requestDisabled={promptRequestDisabled}
+                  state={guidancePromptState}
+                /> : null}
 
-                <div className="editor-region">
-                  {readinessNotice ? (
+                <div
+                  className={
+                    isFlowMode
+                      ? "editor-region editor-region--flow-mode"
+                      : "editor-region"
+                  }
+                >
+                  {!isFlowMode && readinessNotice ? (
                     <div
                       className="readiness-alert"
                       data-tone={readinessNotice.tone}
@@ -565,26 +754,146 @@ export function CaptureCanvas({
                   </label>
                   <textarea
                     aria-describedby={
-                      readinessNotice
+                      isFlowMode
+                        ? undefined
+                        : readinessNotice
                         ? "editor-help capture-readiness"
                         : "editor-help"
                     }
-                    className="story-editor"
+                    className={
+                      isFlowMode
+                        ? "story-editor story-editor--flow-mode"
+                        : "story-editor"
+                    }
                     disabled={captureDisabled}
                     id="story-editor"
                     onChange={handleContentChange}
                     onSelect={handleEditorSelection}
                     placeholder="Start speaking or writing whenever you’re ready."
+                    ref={editorRef}
                     spellCheck="true"
                     value={content}
                   />
-                  <p className="editor-help" id="editor-help">
+                  {!isFlowMode ? <p className="editor-help" id="editor-help">
                     Your words remain yours. Pause, change direction or return
                     whenever you want.
-                  </p>
+                  </p> : null}
                 </div>
 
-                {isProcessing ? (
+                {isFlowMode ? (
+                  <div className="flow-mode-controls">
+                    <button
+                      className="flow-mode-exit"
+                      onClick={exitFlowMode}
+                      type="button"
+                    >
+                      Exit Flow Mode
+                    </button>
+                    <button
+                      aria-describedby={
+                        captureDisabled
+                          ? "flow-recording-readiness-help"
+                          : isProcessing
+                            ? "flow-recording-processing-help"
+                            : hasPendingRecording
+                              ? "flow-recording-pending-help"
+                              : undefined
+                      }
+                      aria-pressed={isRecording}
+                      className="flow-mode-voice"
+                      data-recording={isRecording ? "true" : "false"}
+                      disabled={
+                        captureDisabled || isProcessing || hasPendingRecording
+                      }
+                      onClick={recordingAction}
+                      type="button"
+                    >
+                      {isRecording ? (
+                        <span aria-hidden="true" className="stop-icon" />
+                      ) : (
+                        <MicrophoneIcon />
+                      )}
+                      <span>
+                        {isRecording
+                          ? "Stop recording"
+                          : isProcessing
+                            ? "Preparing transcript"
+                            : hasPendingRecording
+                              ? "Transcript needs attention"
+                              : "Voice Mode"}
+                      </span>
+                    </button>
+                    {isRecording ? (
+                      <div className="flow-mode-voice__activity">
+                        <span
+                          aria-live="polite"
+                          className="visually-hidden"
+                          role="status"
+                        >
+                          Voice recording active
+                        </span>
+                        <RecordingActivityWave />
+                        <time
+                          aria-label={`Recording duration ${describeDuration(recordingDurationSeconds)}`}
+                          className="recording-duration flow-mode-voice__duration"
+                          dateTime={`PT${Math.max(0, Math.floor(recordingDurationSeconds))}S`}
+                          role="timer"
+                        >
+                          {formatDuration(recordingDurationSeconds)}
+                        </time>
+                      </div>
+                    ) : null}
+                    {captureDisabled ? (
+                      <span
+                        className="visually-hidden"
+                        id="flow-recording-readiness-help"
+                      >
+                        {readinessNotice?.message ??
+                          "Voice Mode is unavailable until capture is ready."}
+                      </span>
+                    ) : null}
+                    {isProcessing ? (
+                      <span
+                        className="visually-hidden"
+                        id="flow-recording-processing-help"
+                      >
+                        Wait until the current transcript is ready before starting
+                        another recording.
+                      </span>
+                    ) : null}
+                    {hasPendingRecording && !isProcessing ? (
+                      <span
+                        className="visually-hidden"
+                        id="flow-recording-pending-help"
+                      >
+                        Retry the saved recording’s transcript before starting
+                        another recording.
+                      </span>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="flow-mode-entry">
+                    <button
+                      aria-describedby={
+                        flowModeDisabled ? "flow-mode-unavailable" : undefined
+                      }
+                      className="flow-mode-entry__button"
+                      disabled={flowModeDisabled}
+                      onClick={() => setIsFlowMode(true)}
+                      ref={flowModeButtonRef}
+                      type="button"
+                    >
+                      Flow Mode
+                    </button>
+                    {flowModeDisabled ? (
+                      <span className="visually-hidden" id="flow-mode-unavailable">
+                        Flow Mode is available while you are writing.
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+
+                {!isFlowMode && isProcessing ? (
                   <p className="processing-note">
                     Preparing a faithful transcript. You can keep writing while
                     it is processed; another recording will be available when it
@@ -592,11 +901,11 @@ export function CaptureCanvas({
                   </p>
                 ) : null}
 
-                {captureMessage ||
+                {!isFlowMode && (captureMessage ||
                 onRetryCapture ||
                 onKeepAudioAndContinue ||
                 onDownloadRecordingBackup ||
-                onReviewConflictVersions ? (
+                onReviewConflictVersions) ? (
                   <div className="capture-alert" role="alert">
                     <p>
                       {captureMessage ??
@@ -641,7 +950,7 @@ export function CaptureCanvas({
                   </div>
                 ) : null}
 
-                {hasOriginalTranscript ? (
+                {!isFlowMode && hasOriginalTranscript ? (
                   <p className="transcript-note">
                     Transcripts keep your words and add only punctuation,
                     capitalisation and paragraph breaks. You can edit this
@@ -649,16 +958,16 @@ export function CaptureCanvas({
                   </p>
                 ) : null}
 
-                <OriginalsAndHistory
+                {!isFlowMode ? <OriginalsAndHistory
                   hasOriginalAudio={hasOriginalAudio}
                   hasOriginalTranscript={hasOriginalTranscript}
                   hasVersionHistory={hasVersionHistory}
                   onOpenOriginalAudio={onOpenOriginalAudio}
                   onOpenOriginalTranscript={onOpenOriginalTranscript}
                   onOpenVersionHistory={onOpenVersionHistory}
-                />
+                /> : null}
 
-                <div className="capture-actions">
+                {!isFlowMode ? <div className="capture-actions">
                   <button
                     className="recording-button"
                     data-recording={isRecording ? "true" : "false"}
@@ -758,9 +1067,9 @@ export function CaptureCanvas({
                       </span>
                     </div>
                   ) : null}
-                </div>
+                </div> : null}
 
-                {onDiscardRecoveredDraft || onStartNewStory ? (
+                {!isFlowMode && (onDiscardRecoveredDraft || onStartNewStory) ? (
                   <div className="draft-lifecycle-actions">
                     {onDiscardRecoveredDraft ? (
                       <button
@@ -801,14 +1110,14 @@ export function CaptureCanvas({
           </div>
         </section>
 
-        <aside aria-label="Privacy note" className="privacy-note">
+        {!isFlowMode ? <aside aria-label="Privacy note" className="privacy-note">
           <p>
             <strong>Private by default.</strong>{" "}
             {isAuthenticated
               ? "Only you can open stories saved to your account."
               : "Until you sign in by email, this draft stays only in this browser on this device."}
           </p>
-        </aside>
+        </aside> : null}
       </main>
 
       {microphoneDialog && onDismissMicrophone ? (

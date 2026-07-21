@@ -56,6 +56,22 @@ function requireMatchingDraft(
   return recovered;
 }
 
+function requireMatchingCloudAudio(
+  existing: CloudAudioSegment,
+  local: RecoveredGuestDraft["audio_segments"][number],
+  storyId: Uuid,
+): void {
+  if (
+    existing.id !== local.client_segment_id ||
+    existing.client_segment_id !== local.client_segment_id ||
+    existing.story_id !== storyId ||
+    existing.duration_ms !== local.duration_ms ||
+    Date.parse(existing.recorded_at) !== local.recorded_at
+  ) {
+    throw new CloudPersistenceError("AUDIO_CONFLICT");
+  }
+}
+
 async function sha256Blob(blob: Blob): Promise<string> {
   if (!globalThis.crypto?.subtle) {
     throw new StorySyncError("cloud-sync-failed");
@@ -104,28 +120,35 @@ async function uploadArtefacts(
     );
     const sequenceNumber =
       existingAudio?.sequence_number ?? nextAudioSequence++;
-    const parts = await persistence.readAudioParts(
-      segment.client_segment_id,
-    );
-    const cloudParts = [];
-    for (const part of parts) {
-      cloudParts.push({
-        part_number: part.part_sequence_number,
-        media_type: part.media_type,
-        duration_ms: part.duration_ms,
-        start_offset_ms: part.start_offset_ms,
-        audio: part.blob,
-        audio_sha256: await sha256Blob(part.blob),
+    if (existingAudio) {
+      // A cloud audio row is created only after every immutable Storage part
+      // has been verified and finalised. Re-uploading those same objects makes
+      // an unrelated later text edit depend on duplicate-upload recovery.
+      requireMatchingCloudAudio(existingAudio, segment, storyId);
+    } else {
+      const parts = await persistence.readAudioParts(
+        segment.client_segment_id,
+      );
+      const cloudParts = [];
+      for (const part of parts) {
+        cloudParts.push({
+          part_number: part.part_sequence_number,
+          media_type: part.media_type,
+          duration_ms: part.duration_ms,
+          start_offset_ms: part.start_offset_ms,
+          audio: part.blob,
+          audio_sha256: await sha256Blob(part.blob),
+        });
+      }
+      await cloud.uploadFinalisedAudio({
+        story_id: storyId,
+        client_segment_id: segment.client_segment_id,
+        sequence_number: sequenceNumber,
+        duration_ms: segment.duration_ms,
+        recorded_at: segment.recorded_at,
+        parts: cloudParts,
       });
     }
-    await cloud.uploadFinalisedAudio({
-      story_id: storyId,
-      client_segment_id: segment.client_segment_id,
-      sequence_number: sequenceNumber,
-      duration_ms: segment.duration_ms,
-      recorded_at: segment.recorded_at,
-      parts: cloudParts,
-    });
 
     const transcript = transcriptBySegment.get(segment.client_segment_id);
     if (transcript) {

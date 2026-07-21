@@ -4,4 +4,16 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react(), cloudflare()],
+  environments: {
+    client: {
+      build: {
+        rollupOptions: {
+          input: {
+            capture: "index.html",
+            landing: "landing.html",
+          },
+        },
+      },
+    },
+  },
 });

@@ -127,7 +127,7 @@ A person can open the web application, capture a story through voice or writing 
 
 - Just listen as the default capture mode
 
-- Visible Guide me and Give me a prompt options
+- Visible Interview me and Guide me with a prompt options
 
 - Calm recording state with explicit stop control, a minimal muted sine wave, and elapsed time
 
@@ -144,6 +144,8 @@ A person can open the web application, capture a story through voice or writing 
 - Fresh canvas as the default authenticated landing experience
 
 - Simple previous-stories library using AI title, date, excerpt, and duration
+
+- Optional private **Visualise my stories** surface using a shuffled, non-chronological arrangement of factual story summaries
 
 - Optional, visible use of earlier stories during guided sessions
 
@@ -209,7 +211,7 @@ A person can open the web application, capture a story through voice or writing 
 
 ### 4.4 Guided capture
 
-- The user explicitly switches from Just listen to Guide me.
+- The user explicitly switches from Just listen to Interview me.
 
 - The interface offers Stay with this story and Explore past stories as visible context choices.
 
@@ -221,7 +223,19 @@ A person can open the web application, capture a story through voice or writing 
 
 - AI never interrupts an active recording or starts speaking automatically.
 
-### 4.5 Guest recovery
+### 4.5 Visualise retained stories
+
+- An authenticated user explicitly opens **Visualise my stories** outside the capture flow.
+
+- Retained story titles and verbatim excerpts move through a slowly animated, shuffled arrangement that does not use chronology, categories, inferred relationships, or generated imagery.
+
+- The arrangement remains stable until the user selects **Shuffle stories**. Selecting a story pauses the motion and exposes its factual metadata and an **Open story** action.
+
+- **Pause motion** is always available. Reduced-motion preferences replace the animated arrangement with a static editorial composition without removing any story action.
+
+- The surface remains private. Order and proximity explicitly do not imply that stories are connected, and opening a story uses the same safe open-and-continue path as the library.
+
+### 4.6 Guest recovery
 
 If an unsigned-in visitor closes the tab or browser, the guest draft remains recoverable on the same device for 30 days. On return, the application should make the recovered draft visible without falsely implying that it has been cloud-saved. The user can keep it through passwordless email sign-in or discard it.
 
@@ -229,11 +243,13 @@ If an unsigned-in visitor closes the tab or browser, the guest draft remains rec
 
 ### 5.1 Information architecture
 
-The MVP has two primary product spaces:
+The MVP has two primary product spaces and one optional exploratory surface:
 
 - **Capture canvas:** the default landing and story-editing surface.
 
 - **Your stories:** a minimal personal library for opening and continuing retained stories.
+
+- **Visualise my stories:** a private, non-chronological animated arrangement for rediscovering retained stories without replacing the practical library.
 
 Account and settings controls remain secondary. There is no dashboard, progress score, category navigation, public profile, or onboarding questionnaire.
 
@@ -243,7 +259,7 @@ Account and settings controls remain secondary. There is no dashboard, progress 
 | --- | --- |
 | **Layout** | A centred, readable document canvas with generous whitespace and minimal persistent controls. |
 | **Starting state** | Placeholder text such as 'Start speaking or writing...' and an immediately available microphone. |
-| **Mode controls** | Just listen visibly selected; Guide me and Give me a prompt clearly available without dominating the canvas. |
+| **Mode controls** | Just listen visibly selected; Interview me and Guide me with a prompt clearly available without dominating the canvas. |
 | **Recording control** | A prominent start/stop microphone control positioned consistently on desktop and smaller screens. |
 | **Status** | Quiet states for Listening, Processing transcript, Saving, Saved locally, and Saved. |
 | **Editor** | Plain paragraphs, cursor editing, selection, copy/paste, and undo/redo; no visible formatting toolbar. |
@@ -253,7 +269,7 @@ Account and settings controls remain secondary. There is no dashboard, progress 
 
 | **State** | **User sees** | **Available action** |
 | --- | --- | --- |
-| **Empty** | No story record until the first character or recording begins. | Type, start voice, Guide me, or request a prompt. |
+| **Empty** | No story record until the first character or recording begins. | Type, start voice, Interview me, or request a prompt. |
 | **Recording** | Calm canvas; no live transcript or reactive audio visualisation. A minimal muted sine wave confirms that capture is active beside the Listening state and elapsed time. | Stop the spoken segment. |
 | **Processing** | Recording is secure; transcript is being prepared. Editing controls remain stable. | Wait, type elsewhere if safe, or retry after an error. |
 | **Editing** | Faithful transcript appears in the canvas and can be directly edited. | Type, record more, undo, or leave. |
@@ -275,6 +291,12 @@ Each library item includes only the information required to recognise and reopen
 - An open-and-continue action
 
 If AI cannot produce a confident factual title, the card falls back to the date and excerpt. Titles are editable, but no title is required from the user. The library is reverse chronological in the MVP and contains no visible categories, scores, summaries, or progress indicators.
+
+### 5.5 Story visualisation
+
+The visualisation uses the same owner-scoped summaries as the story library. It may vary scale, position and order for visual rhythm, but it must not infer meaning from proximity or turn capture dates into a life timeline. Each story remains identifiable through its factual title, verbatim excerpt, capture date, voice duration when present, and **Open story** action.
+
+Motion is ambient and user-controlled rather than a video or autoplaying slideshow. It pauses on explicit request, while a story is in focus, and when the page is hidden. It does not play audio automatically. Decorative copies used for a continuous visual flow are hidden from assistive technology; every retained story has one semantic interactive representation.
 
 ## 6. AI and transcription behaviour
 
@@ -309,9 +331,9 @@ AI supports capture without becoming the author. Its MVP roles are speech transc
 
 - Just listen is the default and AI remains silent.
 
-- Give me a prompt provides a single optional starting prompt without changing modes permanently.
+- Guide me with a prompt provides one optional prompt without changing modes permanently. It may use only the story currently open; if there is not enough meaningful context, it offers a general topic such as work, holidays, people, places, practical wisdom, or a clear memory.
 
-- Guide me presents one question at a time and waits for the user's action.
+- Interview me presents one question at a time and waits for the user's action.
 
 - Stay with this story limits guidance to the current material.
 
@@ -407,7 +429,7 @@ After capture, AI may generate a short, descriptive title for the library card. 
 | **AI-02** | Preserve filler words, repetitions, false starts, vocabulary, and meaning by default. | Must |
 | **AI-03** | Mark uncertain transcription rather than silently guessing. | Must |
 | **AI-04** | Retain playable original audio associated with transcript content. | Must |
-| **AI-05** | Offer Just listen, Guide me, and Give me a prompt within the same canvas. | Must |
+| **AI-05** | Offer Just listen, Interview me, and Guide me with a prompt within the same canvas. | Must |
 | **AI-06** | Use previous stories for guidance only after explicit Explore past stories selection. | Must |
 | **AI-07** | Identify and link the prior story used to form a guided question. | Must |
 | **AI-08** | Generate a simple factual library title without blocking save if generation fails. | Should |
@@ -426,6 +448,9 @@ After capture, AI may generate a short, descriptive title for the library card. 
 | **LIB-01** | List retained stories in reverse chronological order. | Must |
 | **LIB-02** | Display title, date/time, verbatim excerpt, duration, and open action. | Must |
 | **LIB-03** | Allow the user to open and continue an earlier story in the same canvas. | Must |
+| **VIS-01** | Present retained stories in a shuffled, non-chronological arrangement without inferred categories, chronology, or relationships. | Must |
+| **VIS-02** | Provide pause, resume, shuffle, story focus, return-to-capture, and safe open-story actions. | Must |
+| **VIS-03** | Replace ambient motion with an equivalent static arrangement when reduced motion is requested. | Must |
 
 ### 8.4 Non-functional requirements
 
@@ -433,7 +458,7 @@ After capture, AI may generate a short, descriptive title for the library card. 
 
 - **NFR-02 Responsiveness.** The capture flow must remain usable across current desktop and mobile browsers selected for MVP support.
 
-- **NFR-03 Accessibility.** Core capture, stop, mode, editor, sign-in, library, and recovery actions must be keyboard and screen-reader operable.
+- **NFR-03 Accessibility.** Core capture, stop, mode, editor, sign-in, library, visualisation, and recovery actions must be keyboard and screen-reader operable.
 
 - **NFR-04 Visual stability.** Recording must not cause moving text, reactive audio visualisation, layout shift, or uncontrolled focus changes. The approved minimal sine wave is the only recording animation and becomes static under reduced motion.
 
@@ -456,6 +481,8 @@ After capture, AI may generate a short, descriptive title for the library card. 
 - Ensure the static recording state still communicates that capture is active to screen-reader users.
 
 - Respect reduced-motion preferences; the core recording state should already require no movement.
+
+- Keep a persistent pause control beside any ambient visualisation that moves for longer than five seconds; focusing or selecting a moving story must pause its motion.
 
 - Use readable line length, scalable text, sufficient contrast, and touch targets appropriate for smaller screens.
 
@@ -516,11 +543,13 @@ Initial metrics should validate whether people can begin, trust, and retain a st
 
 - Authenticated autosave truthfully distinguishes Saving, Saved, and Not yet synced states.
 
-- Guide me can be entered and exited without affecting the story; previous stories are unavailable unless explicitly enabled.
+- Interview me can be entered and exited without affecting the story; previous stories are unavailable unless explicitly enabled.
 
 - Every cross-story question visibly names and links its source story.
 
 - The story library shows a simple title, date, excerpt, duration, and reliable open-and-continue action.
+
+- **Visualise my stories** remains private, non-chronological and fully usable with motion paused or reduced, without implying connections between neighbouring stories.
 
 - Core flows pass keyboard, screen-reader, mobile-width, network-interruption, and microphone-denial tests.
 
@@ -544,7 +573,7 @@ Initial metrics should validate whether people can begin, trust, and retain a st
 
 | **Layer** | **Examples** |
 | --- | --- |
-| **Organisation** | AI-generated themes, people, places, time periods, relationships, story connections, search, and evolving collections. |
+| **Organisation** | AI-generated themes, people, places, time periods, relationships, story connections, search, and evolving collections. The approved shuffled visualisation is presentation-only and does not implement these layers. |
 | **Long-form outputs** | Generated autobiography, chapters, timelines, wisdom collections, printed or exported formats. |
 | **Sharing** | Private invitations, selective sharing, anonymous or public publishing, discovery, and consent controls. |
 | **Media** | Photographs, documents, letters, video, and other memory anchors. |
@@ -598,6 +627,6 @@ The remaining launch decisions are:
 
 4. **Build the thin vertical slice.** Implement guest capture through authenticated recovery before adding guidance or library refinement.
 
-5. **Add optional AI.** Layer Guide me, prompts, titles, and explicit past-story context only after capture reliability is proven.
+5. **Add optional AI.** Layer Interview me, one-off prompts, titles, and explicit past-story context only after capture reliability is proven.
 
 > **MVP guardrail:** The first release succeeds when a person can trust the application to get out of the way and preserve what they meant to say. Organisation and expansion should follow only after that experience is dependable.

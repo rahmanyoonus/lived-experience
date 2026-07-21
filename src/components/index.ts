@@ -5,6 +5,7 @@ export {
   type CapturePhase,
   type CaptureReadinessNotice,
   type EditorSelection,
+  type GuidancePromptState,
   type PersistenceState,
 } from "./CaptureCanvas";
 export {

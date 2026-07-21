@@ -24,6 +24,15 @@ export const IP_RATE_LIMIT_POLICY = {
   hourlyLimit: 20,
 } as const;
 
+export const GUIDANCE_BROWSER_RATE_LIMIT_POLICY = {
+  hourlyLimit: 30,
+  dailyLimit: 90,
+} as const;
+
+export const GUIDANCE_IP_RATE_LIMIT_POLICY = {
+  hourlyLimit: 100,
+} as const;
+
 interface RateLimitPolicy {
   readonly hourlyLimit: number;
   readonly dailyLimit?: number;
@@ -56,6 +65,8 @@ export interface TranscriptionRateLimitInput {
 export interface TranscriptionBrowserSession {
   readonly setCookie?: string;
 }
+
+export type GuidanceRateLimitResult = RateLimitDecision;
 
 export interface TranscriptionPartAttemptInput {
   readonly segmentKey: string;
@@ -276,7 +287,7 @@ export class TranscriptionRateLimiter extends DurableObject<Env> {
   }
 
   async reserve(
-    scope: "browser" | "ip",
+    scope: "browser" | "ip" | "guidance-browser" | "guidance-ip",
     segmentKey: string,
   ): Promise<RateLimitDecision> {
     this.ensureSchema();
@@ -286,7 +297,11 @@ export class TranscriptionRateLimiter extends DurableObject<Env> {
     const policy: RateLimitPolicy =
       scope === "browser"
         ? BROWSER_RATE_LIMIT_POLICY
-        : IP_RATE_LIMIT_POLICY;
+        : scope === "ip"
+          ? IP_RATE_LIMIT_POLICY
+          : scope === "guidance-browser"
+            ? GUIDANCE_BROWSER_RATE_LIMIT_POLICY
+            : GUIDANCE_IP_RATE_LIMIT_POLICY;
 
     const decision: RateLimitDecision =
       this.ctx.storage.transactionSync(() => {
@@ -652,7 +667,7 @@ async function importHmacKey(secret: string): Promise<CryptoKey> {
 
 async function hmacIdentity(
   key: CryptoKey,
-  scope: "browser" | "browser-cookie" | "ip" | "segment",
+  scope: "browser" | "browser-cookie" | "guidance" | "ip" | "segment",
   identity: string,
 ): Promise<string> {
   const encoder = new TextEncoder();
@@ -784,4 +799,46 @@ export async function enforceTranscriptionRateLimits(
       leaseId: attemptDecision.leaseId,
     },
   };
+}
+
+export async function enforceGuidanceRateLimits(
+  request: Request,
+  env: Env,
+  requestId: string,
+): Promise<GuidanceRateLimitResult> {
+  const secret = env.RATE_LIMIT_SECRET?.trim();
+  if (!secret || secret.length < RATE_LIMIT_SECRET_MIN_LENGTH) {
+    throw new Error("Rate limit secret is unavailable.");
+  }
+  const ipAddress = request.headers.get("CF-Connecting-IP")?.trim();
+  if (!ipAddress) {
+    throw new Error("Client network identity is unavailable.");
+  }
+  if (!UUID.test(requestId)) {
+    throw new Error("Guidance request identity is invalid.");
+  }
+
+  const hmacKey = await importHmacKey(secret);
+  const browserId = await browserIdFromCookie(
+    request.headers.get("Cookie"),
+    hmacKey,
+  );
+  if (!browserId) {
+    throw new Error("Browser guidance session is unavailable.");
+  }
+  const [browserKey, ipKey, guidanceKey] = await Promise.all([
+    hmacIdentity(hmacKey, "browser", browserId),
+    hmacIdentity(hmacKey, "ip", ipAddress),
+    hmacIdentity(hmacKey, "guidance", requestId),
+  ]);
+
+  const ipDecision = await env.RATE_LIMITER.getByName(
+    `guidance-ip:${ipKey}`,
+  ).reserve("guidance-ip", guidanceKey);
+  if (!ipDecision.allowed) {
+    return ipDecision;
+  }
+  return env.RATE_LIMITER.getByName(
+    `guidance-browser:${browserKey}`,
+  ).reserve("guidance-browser", guidanceKey);
 }

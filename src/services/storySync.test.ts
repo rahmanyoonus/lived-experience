@@ -50,6 +50,8 @@ function cloudAudioSegment(
   story: CloudStory,
   clientSegmentId: Uuid,
   sequenceNumber: number,
+  durationMs = 1_200,
+  recordedAt = "2026-07-19T00:00:00.000Z",
 ): CloudAudioSegment {
   return {
     id: clientSegmentId,
@@ -57,8 +59,8 @@ function cloudAudioSegment(
     owner_id: story.owner_id,
     client_segment_id: clientSegmentId,
     sequence_number: sequenceNumber,
-    duration_ms: 1_200,
-    recorded_at: "2026-07-19T00:00:00.000Z",
+    duration_ms: durationMs,
+    recorded_at: recordedAt,
     created_at: "2026-07-19T00:00:00.000Z",
   };
 }
@@ -438,6 +440,70 @@ describe("story cloud synchronisation", () => {
     );
   });
 
+  it("syncs a later text edit without re-uploading acknowledged audio", async () => {
+    const firstText = "A fictional clockmaker recorded a blue paper bell.";
+    const local = await persistence.saveText({ current_text: firstText });
+    if (!local) {
+      throw new Error("The synthetic local story was not created.");
+    }
+    const segment = await persistence.createAudioSegment({
+      media_type: "audio/webm",
+    });
+    await persistence.appendAudioChunk({
+      client_segment_id: segment.value.client_segment_id,
+      chunk_sequence_number: 1,
+      part_elapsed_ms: 1_000,
+      blob: new Blob(["synthetic-acknowledged-audio"], {
+        type: "audio/webm",
+      }),
+    });
+    const finalised = await persistence.finaliseAudioSegment({
+      client_segment_id: segment.value.client_segment_id,
+      duration_ms: 1_000,
+    });
+    await persistence.skipAudioTranscription({
+      client_segment_id: segment.value.client_segment_id,
+    });
+
+    const ownerId = crypto.randomUUID();
+    const storyId = crypto.randomUUID();
+    await synchroniseActiveStory(
+      persistence,
+      fakeCloud(
+        cloudStory(ownerId, storyId, local.value.client_story_id, firstText),
+      ).cloud,
+    );
+
+    const editedText = `${firstText} The note was added later.`;
+    await persistence.saveText({ current_text: editedText });
+    const remoteStory = cloudStory(
+      ownerId,
+      storyId,
+      local.value.client_story_id,
+      firstText,
+      2,
+    );
+    const next = fakeCloud(remoteStory, {
+      audio_segments: [
+        cloudAudioSegment(
+          remoteStory,
+          finalised.value.client_segment_id,
+          1,
+          finalised.value.duration_ms,
+          new Date(finalised.value.recorded_at).toISOString(),
+        ),
+      ],
+    });
+
+    await expect(
+      synchroniseActiveStory(persistence, next.cloud),
+    ).resolves.toMatchObject({ fullySynced: true });
+    expect(next.uploadFinalisedAudio).not.toHaveBeenCalled();
+    expect(next.updateStory).toHaveBeenCalledWith(
+      expect.objectContaining({ current_text: editedText }),
+    );
+  });
+
   it("compares an offline edit with its durable acknowledged base, not the newly opened revision", async () => {
     const firstText = "A fictional pilot folded a silver paper map.";
     const local = await persistence.saveText({ current_text: firstText });
@@ -553,7 +619,7 @@ describe("story cloud synchronisation", () => {
     });
   });
 
-  it("safely retries existing artefacts and allocates new positions after remote maxima", async () => {
+  it("skips acknowledged audio and allocates new positions after remote maxima", async () => {
     const text = "A fictional watchmaker catalogued the bells of an empty town.";
     const local = await persistence.saveText({ current_text: text });
     if (!local) {
@@ -606,6 +672,8 @@ describe("story cloud synchronisation", () => {
           remoteStory,
           firstSegment.value.client_segment_id,
           3,
+          1_200,
+          new Date(firstSegment.value.recorded_at).toISOString(),
         ),
         cloudAudioSegment(remoteStory, crypto.randomUUID(), 7),
       ],
@@ -627,15 +695,8 @@ describe("story cloud synchronisation", () => {
 
     await synchroniseActiveStory(persistence, fake.cloud);
 
-    expect(fake.uploadFinalisedAudio).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        client_segment_id: firstSegment.value.client_segment_id,
-        sequence_number: 3,
-      }),
-    );
-    expect(fake.uploadFinalisedAudio).toHaveBeenNthCalledWith(
-      2,
+    expect(fake.uploadFinalisedAudio).toHaveBeenCalledTimes(1);
+    expect(fake.uploadFinalisedAudio).toHaveBeenCalledWith(
       expect.objectContaining({
         client_segment_id: secondSegment.value.client_segment_id,
         sequence_number: 8,

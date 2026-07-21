@@ -33,11 +33,18 @@ decisions.
   delivery, callback, cloud save, reload, and private-library retrieval. The
   authenticated original-audio guest-to-cloud path is live-verified in desktop
   Chrome through upload, cloud acknowledgement, reload, and private-library
-  recovery. Do not imply that another unverified adapter or flow is live.
+  recovery. One-off **Guide me with a prompt** guidance is deployed and
+  live-verified with both empty and clearly fictional current-story requests;
+  **Interview me** remains disabled. Do not imply that another unverified
+  adapter or flow is live.
 - OpenAI Zero Data Retention is deferred. The accepted transcription boundary
   relies on the current documented defaults for `/v1/audio/transcriptions`;
   re-check those defaults before sending personal story audio or launching
-  publicly, and whenever the endpoint or provider policy changes.
+  publicly, and whenever the endpoint or provider policy changes. Prompt
+  guidance uses `/v1/responses` with `store: false`, but OpenAI's documented
+  default abuse-monitoring logs may contain prompts and responses for up to 30
+  days unless approved retention controls are enabled. Do not describe prompt
+  guidance as Zero Data Retention.
 - Record consequential and difficult-to-reverse choices in a short ADR under
   `docs/decisions/`.
 - Use `npm run dev`, `npm run lint`, `npm run typecheck`, `npm test`, and
@@ -60,8 +67,8 @@ All implementation work must preserve these decisions:
   onboarding questionnaire, dashboard, or unfinished-story chooser in front of
   capture.
 - Let a guest type or begin recording before creating an account.
-- Keep **Just listen** as the default. **Guide me** and **Give me a prompt** must
-  remain clearly available and optional.
+- Keep **Just listen** as the default. **Interview me** and **Guide me with a
+  prompt** must remain clearly available and optional.
 - Keep the screen visually calm while recording. Do not show a live transcript,
   animated words, reactive audio visualisation, or distracting layout changes.
   One minimal, muted sine wave may move only while recording to confirm that

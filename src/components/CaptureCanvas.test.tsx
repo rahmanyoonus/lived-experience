@@ -46,15 +46,129 @@ describe("CaptureCanvas", () => {
     ).toHaveAttribute("aria-pressed", "true");
     expect(
       screen.getByRole("button", {
-        name: /Guide me\s*Not yet available/,
+        name: /Interview me\s*Not yet available/,
       }),
     ).toBeDisabled();
     expect(
       screen.getByRole("button", {
-        name: /Give me a prompt\s*Not yet available/,
+        name: /Guide me with a prompt\s*Not yet available/,
       }),
     ).toBeDisabled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("shows a one-off prompt without changing the story or selected mode", async () => {
+    const user = userEvent.setup();
+    const onContentChange = vi.fn();
+    const onRequestPrompt = vi.fn();
+    const onDismissPrompt = vi.fn();
+    const { rerender } = render(
+      <CaptureCanvas
+        {...makeProps({
+          content: "A fictional memory about a bicycle workshop.",
+          guidancePromptState: { status: "idle" },
+          hasStarted: true,
+          onContentChange,
+          onDismissPrompt,
+          onRequestPrompt,
+          phase: "editing",
+        })}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Guide me with a prompt" }),
+    );
+    expect(onRequestPrompt).toHaveBeenCalledOnce();
+
+    rerender(
+      <CaptureCanvas
+        {...makeProps({
+          content: "A fictional memory about a bicycle workshop.",
+          guidancePromptState: { status: "loading" },
+          hasStarted: true,
+          onContentChange,
+          onDismissPrompt,
+          onRequestPrompt,
+          phase: "editing",
+        })}
+      />,
+    );
+    expect(
+      screen.getByRole("status", { name: "Prompt guidance" }),
+    ).toHaveTextContent("Finding a prompt…");
+
+    rerender(
+      <CaptureCanvas
+        {...makeProps({
+          content: "A fictional memory about a bicycle workshop.",
+          guidancePromptState: {
+            status: "ready",
+            prompt: "What did the workshop sound like before the town woke up?",
+          },
+          hasStarted: true,
+          onContentChange,
+          onDismissPrompt,
+          onRequestPrompt,
+          phase: "editing",
+        })}
+      />,
+    );
+    expect(
+      screen.getByRole("status", { name: "Prompt guidance" }),
+    ).toHaveTextContent(
+      "What did the workshop sound like before the town woke up?",
+    );
+    expect(
+      screen.getByRole("button", { name: /Just listen\s*On/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("textbox", { name: "Write or edit your story" }),
+    ).toHaveValue("A fictional memory about a bicycle workshop.");
+    expect(onContentChange).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Another prompt" }));
+    expect(onRequestPrompt).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(onDismissPrompt).toHaveBeenCalledOnce();
+  });
+
+  it("keeps prompt errors retryable and blocks new prompts while recording", async () => {
+    const user = userEvent.setup();
+    const onRequestPrompt = vi.fn();
+    const { rerender } = render(
+      <CaptureCanvas
+        {...makeProps({
+          guidancePromptState: {
+            status: "error",
+            message:
+              "A prompt isn’t available right now. Your story is unchanged.",
+          },
+          onDismissPrompt: vi.fn(),
+          onRequestPrompt,
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Your story is unchanged",
+    );
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRequestPrompt).toHaveBeenCalledOnce();
+
+    rerender(
+      <CaptureCanvas
+        {...makeProps({
+          guidancePromptState: { status: "idle" },
+          hasStarted: true,
+          onRequestPrompt,
+          phase: "recording",
+        })}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Guide me with a prompt" }),
+    ).toBeDisabled();
   });
 
   it("offers fictional example text only on an untouched canvas", async () => {
@@ -106,23 +220,152 @@ describe("CaptureCanvas", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("offers a focused writing mode below the editor and exits without changing the story", async () => {
+    const user = userEvent.setup();
+    const onContentChange = vi.fn();
+    render(
+      <CaptureCanvas
+        {...makeProps({
+          content: "A fictional afternoon in a quiet workshop.",
+          hasStarted: true,
+          onContentChange,
+          phase: "editing",
+        })}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox", {
+      name: "Write or edit your story",
+    });
+    const flowModeButton = screen.getByRole("button", { name: "Flow Mode" });
+    expect(editor.compareDocumentPosition(flowModeButton)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+
+    await user.click(flowModeButton);
+
+    expect(editor).toHaveClass("story-editor--flow-mode");
+    expect(editor).toHaveFocus();
+    expect(screen.queryByText("Lived Experience")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start recording" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Private by default.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exit Flow Mode" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Voice Mode" })).toBeEnabled();
+    expect(editor).toHaveValue("A fictional afternoon in a quiet workshop.");
+
+    await user.type(editor, " I kept writing.");
+    expect(onContentChange).toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Exit Flow Mode" }));
+    expect(screen.getByRole("button", { name: "Flow Mode" })).toHaveFocus();
+    expect(screen.getByText("Lived Experience")).toBeInTheDocument();
+  });
+
+  it("starts and stops voice capture inside Flow Mode with restrained activity", async () => {
+    const user = userEvent.setup();
+    const onStartRecording = vi.fn();
+    const onStopRecording = vi.fn();
+    const { container, rerender } = render(
+      <CaptureCanvas
+        {...makeProps({
+          content: "A fictional morning beside the river.",
+          hasStarted: true,
+          onStartRecording,
+          onStopRecording,
+          phase: "editing",
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Flow Mode" }));
+
+    const exitButton = screen.getByRole("button", { name: "Exit Flow Mode" });
+    const voiceButton = screen.getByRole("button", { name: "Voice Mode" });
+    expect(exitButton.compareDocumentPosition(voiceButton)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+
+    await user.click(voiceButton);
+    expect(onStartRecording).toHaveBeenCalledOnce();
+
+    rerender(
+      <CaptureCanvas
+        {...makeProps({
+          content: "A fictional morning beside the river.",
+          hasStarted: true,
+          onStartRecording,
+          onStopRecording,
+          phase: "recording",
+          recordingDurationSeconds: 65,
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Voice recording active")).toBeInTheDocument();
+    expect(
+      screen.getByRole("timer", {
+        name: "Recording duration 1 minute, 5 seconds",
+      }),
+    ).toHaveTextContent("01:05");
+    expect(container.querySelector(".flow-mode-voice__activity .recording-wave"))
+      .toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Stop recording" }));
+    expect(onStopRecording).toHaveBeenCalledOnce();
+  });
+
+  it("exits Flow Mode with Escape and keeps it unavailable during voice work", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <CaptureCanvas
+        {...makeProps({ hasStarted: true, phase: "editing" })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Flow Mode" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("button", { name: "Exit Flow Mode" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Flow Mode" })).toHaveFocus();
+
+    rerender(
+      <CaptureCanvas
+        {...makeProps({ hasStarted: true, phase: "recording" })}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Flow Mode" })).toBeDisabled();
+  });
+
   it("keeps the private library out of the guest capture flow", async () => {
     const user = userEvent.setup();
     const onOpenStories = vi.fn();
+    const onOpenStoryVisualisation = vi.fn();
     const { rerender } = render(<CaptureCanvas {...makeProps()} />);
 
     expect(
       screen.queryByRole("button", { name: "Your stories" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Visualise my stories" }),
+    ).not.toBeInTheDocument();
 
     rerender(
       <CaptureCanvas
-        {...makeProps({ isAuthenticated: true, onOpenStories })}
+        {...makeProps({
+          isAuthenticated: true,
+          onOpenStories,
+          onOpenStoryVisualisation,
+        })}
       />,
     );
 
     await user.click(screen.getByRole("button", { name: "Your stories" }));
     expect(onOpenStories).toHaveBeenCalledOnce();
+    await user.click(
+      screen.getByRole("button", { name: "Visualise my stories" }),
+    );
+    expect(onOpenStoryVisualisation).toHaveBeenCalledOnce();
   });
 
   it("shows restrained recording activity, elapsed time, and an explicit stop", () => {

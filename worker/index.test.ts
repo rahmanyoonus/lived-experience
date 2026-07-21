@@ -105,6 +105,34 @@ function transcriptionRequest(
   );
 }
 
+function guidanceRequest(
+  body: Record<string, unknown> = {},
+  headers?: HeadersInit,
+): IncomingWorkerRequest {
+  const requestHeaders = new Headers({
+    "CF-Connecting-IP": "192.0.2.10",
+    Cookie: `__Host-le_rl_browser=${SIGNED_BROWSER_COOKIE}`,
+    "Content-Type": "application/json",
+    Origin: "https://example.test",
+    "Sec-Fetch-Site": "same-origin",
+  });
+  new Headers(headers).forEach((value, name) => {
+    requestHeaders.set(name, value);
+  });
+  return incomingRequest(
+    new Request("https://example.test/api/prompts", {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        requestId: crypto.randomUUID(),
+        storyExcerpt: "A fictional memory of opening a bicycle workshop before sunrise.",
+        previousPrompt: null,
+        ...body,
+      }),
+    }),
+  );
+}
+
 async function responseJson(response: Response): Promise<unknown> {
   return response.json();
 }
@@ -139,6 +167,33 @@ function transcriptionResponse(
       status: 200,
       headers: { "Content-Type": "application/json" },
     },
+  );
+}
+
+function guidanceResponse(
+  prompt = "What did the fictional workshop sound like before sunrise?",
+): Response {
+  return new Response(
+    JSON.stringify({
+      status: "completed",
+      output: [
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              text: JSON.stringify({ prompt }),
+            },
+          ],
+        },
+      ],
+      usage: {
+        input_tokens: 120,
+        output_tokens: 18,
+        total_tokens: 138,
+      },
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
   );
 }
 
@@ -212,6 +267,142 @@ describe("Lived Experience Worker", () => {
       status: "degraded",
       transcription: "unavailable",
     });
+  });
+
+  it("generates one bounded current-story prompt without storing provider state", async () => {
+    const upstreamFetch = vi.fn<UpstreamFetch>(() =>
+      Promise.resolve(guidanceResponse()),
+    );
+    const reservationId = crypto.randomUUID();
+    const guidanceSpendReconcile = vi.fn(() => Promise.resolve());
+    const worker = createWorker({
+      upstreamFetch,
+      guidanceRateLimitEnforcer: () =>
+        Promise.resolve({ allowed: true }),
+      guidanceSpendReserve: () =>
+        Promise.resolve({ allowed: true, reservationId }),
+      guidanceSpendReconcile,
+    });
+    const response = await worker.fetch(
+      guidanceRequest(),
+      testEnv("sk-synthetic-guidance"),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(responseJson(response)).resolves.toEqual({
+      prompt: "What did the fictional workshop sound like before sunrise?",
+      basis: "current",
+      provider: "openai",
+      model: "gpt-5.6-luna",
+    });
+    const upstreamInit = upstreamFetch.mock.calls[0]?.[1];
+    const upstreamBody = upstreamInit?.body;
+    if (typeof upstreamBody !== "string") {
+      throw new Error("Expected provider request body to be a string.");
+    }
+    const providerRequest = JSON.parse(upstreamBody) as {
+      model: string;
+      store: boolean;
+      instructions: string;
+      input: string;
+    };
+    expect(providerRequest).toMatchObject({
+      model: "gpt-5.6-luna",
+      store: false,
+    });
+    expect(providerRequest.instructions).not.toContain("bicycle workshop");
+    expect(providerRequest.input).toContain("bicycle workshop");
+    expect(guidanceSpendReconcile).toHaveBeenCalledWith(
+      expect.anything(),
+      reservationId,
+      expect.objectContaining({ status: "completed" }),
+    );
+  });
+
+  it("uses general topics when current-story context is too thin", async () => {
+    const upstreamFetch = vi.fn<UpstreamFetch>(() =>
+      Promise.resolve(
+        guidanceResponse("What is a holiday memory that still feels vivid?"),
+      ),
+    );
+    const worker = createWorker({
+      upstreamFetch,
+      guidanceRateLimitEnforcer: () =>
+        Promise.resolve({ allowed: true }),
+      guidanceSpendReserve: () =>
+        Promise.resolve({
+          allowed: true,
+          reservationId: crypto.randomUUID(),
+        }),
+      guidanceSpendReconcile: () => Promise.resolve(),
+    });
+    const response = await worker.fetch(
+      guidanceRequest({ storyExcerpt: "A memory." }),
+      testEnv("sk-synthetic-guidance"),
+    );
+
+    await expect(responseJson(response)).resolves.toMatchObject({
+      basis: "general",
+      prompt: "What is a holiday memory that still feels vivid?",
+    });
+    const upstreamBody = upstreamFetch.mock.calls[0]?.[1]?.body;
+    if (typeof upstreamBody !== "string") {
+      throw new Error("Expected provider request body to be a string.");
+    }
+    const providerRequest = JSON.parse(upstreamBody) as {
+      instructions: string;
+      input: string;
+    };
+    expect(providerRequest.instructions).toContain("general topic");
+    expect(providerRequest.input).not.toContain("A memory.");
+  });
+
+  it("blocks cross-origin and rate-limited prompt requests before OpenAI", async () => {
+    const upstreamFetch = vi.fn<UpstreamFetch>();
+    const worker = createWorker({
+      upstreamFetch,
+      guidanceRateLimitEnforcer: () =>
+        Promise.resolve({ allowed: false, retryAfterSeconds: 60 }),
+    });
+    const crossOrigin = await worker.fetch(
+      guidanceRequest({}, {
+        Origin: "https://attacker.example",
+        "Sec-Fetch-Site": "cross-site",
+      }),
+      testEnv("sk-synthetic-guidance"),
+    );
+    expect(crossOrigin.status).toBe(403);
+
+    const limited = await worker.fetch(
+      guidanceRequest(),
+      testEnv("sk-synthetic-guidance"),
+    );
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("Retry-After")).toBe("60");
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps prompt provider failures content-free", async () => {
+    const sensitiveFixture = "A synthetic private story about a brass key.";
+    const worker = createWorker({
+      upstreamFetch: () => Promise.reject(new Error(sensitiveFixture)),
+      guidanceRateLimitEnforcer: () =>
+        Promise.resolve({ allowed: true }),
+      guidanceSpendReserve: () =>
+        Promise.resolve({
+          allowed: true,
+          reservationId: crypto.randomUUID(),
+        }),
+      guidanceSpendReconcile: () => Promise.resolve(),
+    });
+    const response = await worker.fetch(
+      guidanceRequest({ storyExcerpt: sensitiveFixture }),
+      testEnv("sk-synthetic-guidance"),
+    );
+    const body = await responseJson(response);
+    expect(response.status).toBe(502);
+    expect(JSON.stringify(body)).not.toContain(sensitiveFixture);
+    expect(body).toMatchObject({ code: "GUIDANCE_PROVIDER_ERROR" });
   });
 
   it("keeps readiness unavailable when required secrets are missing", async () => {

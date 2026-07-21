@@ -2,11 +2,15 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import {
+  actualGuidanceCostNanoUsd,
   actualTranscriptionCostNanoUsd,
+  conservativeGuidanceReservationNanoUsd,
   conservativeTranscriptionReservationNanoUsd,
+  GUIDANCE_PRICING_POLICY,
   TRANSCRIPTION_PRICING_POLICY,
 } from "./spend-gate";
 import { OPENAI_TRANSCRIPTION_PROVIDER_POLICY } from "./provider-policy";
+import { OPENAI_GUIDANCE_PROVIDER_POLICY } from "./guidance-provider-policy";
 
 describe("transcription spend calculations", () => {
   it("uses one provider policy for request identity and accounting", () => {
@@ -44,6 +48,24 @@ describe("transcription spend calculations", () => {
     ).toBe(1_500_000);
     expect(actualTranscriptionCostNanoUsd({ usage: {} })).toBeNull();
     expect(actualTranscriptionCostNanoUsd({})).toBeNull();
+  });
+});
+
+describe("guidance spend calculations", () => {
+  it("uses the cost-sensitive prompt model and a bounded reservation", () => {
+    expect(GUIDANCE_PRICING_POLICY).toBe(OPENAI_GUIDANCE_PROVIDER_POLICY);
+    expect(GUIDANCE_PRICING_POLICY.model).toBe("gpt-5.6-luna");
+    expect(conservativeGuidanceReservationNanoUsd()).toBe(5_460_000);
+  });
+
+  it("reconciles Responses API token usage without accepting malformed usage", () => {
+    expect(
+      actualGuidanceCostNanoUsd({
+        usage: { input_tokens: 100, output_tokens: 20 },
+      }),
+    ).toBe(220_000);
+    expect(actualGuidanceCostNanoUsd({ usage: {} })).toBeNull();
+    expect(actualGuidanceCostNanoUsd({})).toBeNull();
   });
 });
 

@@ -123,6 +123,7 @@ interface MockClientOptions {
   uploadResponse?: MockResponse;
   downloadResponse?: MockResponse;
   listResponse?: MockResponse;
+  infoResponse?: MockResponse;
 }
 
 function createMockClient(options: MockClientOptions = {}) {
@@ -164,13 +165,21 @@ function createMockClient(options: MockClientOptions = {}) {
   const list = vi
     .fn()
     .mockResolvedValue(options.listResponse ?? { data: [], error: null });
+  const info = vi.fn().mockResolvedValue(
+    options.infoResponse ?? {
+      data: null,
+      error: { statusCode: "404", message: "Object not found" },
+    },
+  );
   const download = vi.fn().mockResolvedValue(
     options.downloadResponse ?? {
       data: new Blob(["synthetic-audio"], { type: "audio/webm" }),
       error: null,
     },
   );
-  const storageFrom = vi.fn().mockReturnValue({ download, upload, list });
+  const storageFrom = vi
+    .fn()
+    .mockReturnValue({ download, info, upload, list });
   const from = vi
     .fn()
     .mockImplementation(
@@ -190,6 +199,7 @@ function createMockClient(options: MockClientOptions = {}) {
     download,
     from,
     getUser,
+    info,
     list,
     rpc,
     storageFrom,
@@ -546,25 +556,27 @@ describe("Supabase cloud persistence", () => {
   });
 
   it("reconciles an immutable audio retry without overwriting the object", async () => {
-    const sensitiveBackendMessage = "A fictional private sentence from a story";
     const mock = createMockClient({
-      uploadResponse: {
-        data: null,
-        error: { statusCode: "400", message: sensitiveBackendMessage },
-      },
       listResponse: {
         data: [
           {
             name: "1.webm",
-            metadata: {
-              size: 4,
-              client_segment_id: SEGMENT_ID,
-              audio_part_id: PART_ID,
-              part_number: "1",
-              audio_sha256: AUDIO_SHA256,
-            },
+            metadata: { size: 4, mimetype: "audio/webm" },
           },
         ],
+        error: null,
+      },
+      infoResponse: {
+        data: {
+          size: 4,
+          contentType: "audio/webm",
+          metadata: {
+            clientSegmentId: SEGMENT_ID,
+            audioPartId: PART_ID,
+            partNumber: "1",
+            audioSha256: AUDIO_SHA256,
+          },
+        },
         error: null,
       },
       rpc: (name) =>
@@ -601,8 +613,70 @@ describe("Supabase cloud persistence", () => {
       ],
     });
 
-    expect(mock.upload).toHaveBeenCalledOnce();
+    expect(mock.upload).not.toHaveBeenCalled();
     expect(mock.list).toHaveBeenCalledOnce();
+    expect(mock.info).toHaveBeenCalledOnce();
+    expect(acknowledgement.value.parts[0]?.storage_object_name).toBe(
+      `${OWNER_ID}/${STORY_ID}/${SEGMENT_ID}/1.webm`,
+    );
+  });
+
+  it("reconciles an immutable upload whose acknowledgement response was lost", async () => {
+    const mock = createMockClient({
+      uploadResponse: {
+        data: null,
+        error: { statusCode: "400", message: "Object already exists" },
+      },
+      infoResponse: {
+        data: {
+          size: 4,
+          contentType: "audio/webm",
+          metadata: {
+            clientSegmentId: SEGMENT_ID,
+            audioPartId: PART_ID,
+            partNumber: "1",
+            audioSha256: AUDIO_SHA256,
+          },
+        },
+        error: null,
+      },
+      rpc: (name) =>
+        name === "reserve_audio_upload"
+          ? {
+              data: {
+                reservation: reservationWire(),
+                parts: [partReservationWire()],
+              },
+              error: null,
+            }
+          : {
+              data: { segment: audioWire(), parts: [audioPartWire()] },
+              error: null,
+            },
+    });
+    const persistence = makePersistence(mock.client);
+
+    const acknowledgement = await persistence.uploadFinalisedAudio({
+      story_id: STORY_ID,
+      client_segment_id: SEGMENT_ID,
+      sequence_number: 1,
+      duration_ms: 1_250,
+      recorded_at: Date.parse("2026-07-19T01:02:00.000Z"),
+      parts: [
+        {
+          part_number: 1,
+          media_type: "audio/webm",
+          duration_ms: 1_250,
+          start_offset_ms: 0,
+          audio: new Blob(["safe"], { type: "audio/webm" }),
+          audio_sha256: AUDIO_SHA256,
+        },
+      ],
+    });
+
+    expect(mock.list).toHaveBeenCalledOnce();
+    expect(mock.upload).toHaveBeenCalledOnce();
+    expect(mock.info).toHaveBeenCalledOnce();
     expect(acknowledgement.value.parts[0]?.storage_object_name).toBe(
       `${OWNER_ID}/${STORY_ID}/${SEGMENT_ID}/1.webm`,
     );

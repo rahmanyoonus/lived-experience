@@ -29,6 +29,10 @@ passwordless-email decision is recorded in
 [ADR 0005](./docs/decisions/0005-passwordless-email-authentication.md). The
 failure-only capture readiness policy is recorded in
 [ADR 0006](./docs/decisions/0006-capture-readiness-and-degraded-operation.md).
+The one-off optional prompt boundary is recorded in
+[ADR 0007](./docs/decisions/0007-one-off-prompt-guidance.md).
+The private non-chronological story visualisation is recorded in
+[ADR 0008](./docs/decisions/0008-private-non-chronological-story-visualisation.md).
 
 ## Current architecture
 
@@ -37,6 +41,7 @@ failure-only capture readiness policy is recorded in
 - Supabase Auth, Postgres, and private Storage for authenticated cloud data
 - One Cloudflare Worker with Static Assets and narrow `/api/*` routes
 - OpenAI `gpt-4o-mini-transcribe` through the Worker for English transcription
+- OpenAI `gpt-5.6-luna` through the Worker for one-off optional prompts
 
 IndexedDB and Supabase are complementary. Guest work stays on the current device
 and remains recoverable without a network connection. Supabase is the cloud
@@ -98,6 +103,44 @@ When confidence cannot be mapped to exact word timing, the complete stored
 audio part is the honest review scope. The interface labels it exactly
 **Review this part** and provides playback for that part; it never presents an
 invented word timestamp.
+
+### One-off prompt guidance
+
+**Guide me with a prompt** requests one still-text question without changing
+the selected **Just listen** mode. The browser sends a bounded excerpt from only
+the story currently open to same-origin `/api/prompts`. Previous stories are not
+read. If the open story is empty or too thin, the Worker asks for a general
+prompt about areas such as work, holidays, people, places, practical wisdom, or
+clear memories. The result is never inserted into the story and does not create
+an empty story or change save state.
+
+The Worker uses structured output, `store: false`, no tools, content-free
+errors, a signed-browser and IP quota, a 30-second provider timeout, and the
+same monthly OpenAI spend gate as transcription. The implementation and
+automated boundary are deployed. Production version
+`8a43281f-b92c-4b97-bfc6-ebe31bb418c1` returned both a general prompt for an
+empty request and a relevant prompt for a clearly fictional current-story
+request. No personal story content was used for verification. **Interview me**
+remains disabled for later work.
+
+OpenAI's current data-controls documentation says API data is not used for
+training, but default abuse-monitoring logs may contain prompts and responses
+for up to 30 days. `store: false` avoids a stored response object; it is not a
+Zero Data Retention claim. Zero Data Retention or Modified Abuse Monitoring
+requires separate OpenAI approval and configuration.
+
+### Private story visualisation
+
+Authenticated users can open **Visualise my stories** as an optional alternative
+to the practical story library. The browser uses the same owner-scoped story
+summaries to create a shuffled, slowly moving arrangement of factual titles and
+verbatim excerpts. The arrangement does not infer chronology, categories or
+relationships, and it never plays audio automatically. People can pause,
+resume, shuffle, focus a story and reopen it through the existing safe
+open-and-continue path. Reduced-motion preferences produce a static equivalent.
+
+This interaction is implemented locally with React and transform-only CSS; it
+does not send story content to another provider and adds no animation runtime.
 
 ## Requirements
 
@@ -318,6 +361,8 @@ This version uses:
 - at most two provider attempts for each immutable recording part;
 - three segments per hour and ten per day per browser, plus twenty per hour per
   IP, with a ten-minute client workflow deadline;
+- ten prompts per hour and thirty per day per browser, plus one hundred per
+  hour per IP, with a 35-second client workflow deadline;
 - a US$50 monthly OpenAI ceiling, enforced by stopping new calls at US$49 to
   preserve a US$1 safety margin;
 - 750,000,000 bytes of authenticated audio per account; and
@@ -334,7 +379,8 @@ Before a public launch, decide or verify:
 - the `LivedExp` backup policy and production access controls;
 - whether the approved US-East Worker placement remains appropriate for
   production and whether to enable Zero Data Retention later;
-- the final prompts for later optional guidance and factual titles;
+- representative prompt-guidance evaluation cases, later interview questions,
+  and factual-title prompts;
 - production-environment separation beyond the canonical Cloudflare domain;
 - any server-side conversion fallback if a supported browser produces audio
   that OpenAI does not accept; and

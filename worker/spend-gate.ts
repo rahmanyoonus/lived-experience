@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
+import { OPENAI_GUIDANCE_PROVIDER_POLICY } from "./guidance-provider-policy";
 import { OPENAI_TRANSCRIPTION_PROVIDER_POLICY } from "./provider-policy";
 
 const PROVIDER_CALL_ID =
@@ -7,6 +8,7 @@ const PROVIDER_CALL_ID =
 
 export const TRANSCRIPTION_PRICING_POLICY =
   OPENAI_TRANSCRIPTION_PROVIDER_POLICY;
+export const GUIDANCE_PRICING_POLICY = OPENAI_GUIDANCE_PROVIDER_POLICY;
 
 export interface SpendReservationDecision {
   readonly allowed: boolean;
@@ -102,6 +104,39 @@ export function actualTranscriptionCostNanoUsd(
   }
 
   return null;
+}
+
+export function conservativeGuidanceReservationNanoUsd(): number {
+  return (
+    GUIDANCE_PRICING_POLICY.maxInputTokens *
+      GUIDANCE_PRICING_POLICY.inputNanoUsdPerToken +
+    GUIDANCE_PRICING_POLICY.maxOutputTokens *
+      GUIDANCE_PRICING_POLICY.outputNanoUsdPerToken
+  );
+}
+
+export function actualGuidanceCostNanoUsd(
+  responseBody: unknown,
+): number | null {
+  if (
+    typeof responseBody !== "object" ||
+    responseBody === null ||
+    !("usage" in responseBody) ||
+    typeof responseBody.usage !== "object" ||
+    responseBody.usage === null ||
+    !("input_tokens" in responseBody.usage) ||
+    !("output_tokens" in responseBody.usage) ||
+    !nonNegativeSafeInteger(responseBody.usage.input_tokens) ||
+    !nonNegativeSafeInteger(responseBody.usage.output_tokens)
+  ) {
+    return null;
+  }
+  return (
+    responseBody.usage.input_tokens *
+      GUIDANCE_PRICING_POLICY.inputNanoUsdPerToken +
+    responseBody.usage.output_tokens *
+      GUIDANCE_PRICING_POLICY.outputNanoUsdPerToken
+  );
 }
 
 export class TranscriptionSpendGate extends DurableObject<Env> {
@@ -231,6 +266,31 @@ export async function reconcileTranscriptionSpend(
   const actualNanoUsd = actualTranscriptionCostNanoUsd(responseBody);
   if (actualNanoUsd === null) {
     // Unknown-cost calls retain their conservative reservation.
+    return;
+  }
+  await env.SPEND_GATE.getByName(SPEND_GATE_OBJECT_NAME).reconcile(
+    reservationId,
+    actualNanoUsd,
+  );
+}
+
+export async function reserveGuidanceSpend(
+  env: Env,
+): Promise<SpendReservationDecision> {
+  const providerCallId = crypto.randomUUID();
+  return env.SPEND_GATE.getByName(SPEND_GATE_OBJECT_NAME).reserve(
+    providerCallId,
+    conservativeGuidanceReservationNanoUsd(),
+  );
+}
+
+export async function reconcileGuidanceSpend(
+  env: Env,
+  reservationId: string,
+  responseBody: unknown,
+): Promise<void> {
+  const actualNanoUsd = actualGuidanceCostNanoUsd(responseBody);
+  if (actualNanoUsd === null) {
     return;
   }
   await env.SPEND_GATE.getByName(SPEND_GATE_OBJECT_NAME).reconcile(

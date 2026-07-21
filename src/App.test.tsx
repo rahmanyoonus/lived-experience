@@ -193,6 +193,88 @@ describe("App capture integration", () => {
     );
   });
 
+  it("generates a general prompt on an empty canvas without creating a story", async () => {
+    const user = userEvent.setup();
+    const persistence = testPersistence();
+    const generatePrompt = vi.fn().mockResolvedValue({
+      prompt: "What is a place from your past that you can still picture clearly?",
+      basis: "general" as const,
+      provider: "openai",
+      model: "gpt-5.6-luna",
+    });
+    render(<App dependencies={{ generatePrompt, persistence }} />);
+
+    const promptButton = screen.getByRole("button", {
+      name: "Guide me with a prompt",
+    });
+    await user.click(promptButton);
+
+    expect(
+      await screen.findByText(
+        "What is a place from your past that you can still picture clearly?",
+      ),
+    ).toBeInTheDocument();
+    expect(generatePrompt).toHaveBeenCalledWith(
+      expect.objectContaining({ storyText: "", previousPrompt: null }),
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Write or edit your story" }),
+    ).toHaveValue("");
+    await expect(persistence.recoverGuestDraft()).resolves.toBeNull();
+    expect(screen.queryByText("Saved locally")).not.toBeInTheDocument();
+  });
+
+  it("uses the current story for another prompt without inserting AI text", async () => {
+    const user = userEvent.setup();
+    const persistence = testPersistence();
+    const generatePrompt = vi
+      .fn()
+      .mockResolvedValueOnce({
+        prompt: "What made the fictional workshop feel welcoming to you?",
+        basis: "current" as const,
+        provider: "openai",
+        model: "gpt-5.6-luna",
+      })
+      .mockResolvedValueOnce({
+        prompt: "Which sound from that fictional workshop do you remember most?",
+        basis: "current" as const,
+        provider: "openai",
+        model: "gpt-5.6-luna",
+      });
+    render(<App dependencies={{ generatePrompt, persistence }} />);
+
+    const editor = screen.getByRole("textbox", {
+      name: "Write or edit your story",
+    });
+    const storyText = "I remember a fictional workshop beside the old market.";
+    await user.type(editor, storyText);
+    await screen.findByText("Saved locally");
+    await user.click(
+      screen.getByRole("button", { name: "Guide me with a prompt" }),
+    );
+    await screen.findByText(
+      "What made the fictional workshop feel welcoming to you?",
+    );
+    await user.click(screen.getByRole("button", { name: "Another prompt" }));
+    await screen.findByText(
+      "Which sound from that fictional workshop do you remember most?",
+    );
+
+    expect(generatePrompt).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ storyText, previousPrompt: null }),
+    );
+    expect(generatePrompt).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        storyText,
+        previousPrompt:
+          "What made the fictional workshop feel welcoming to you?",
+      }),
+    );
+    expect(editor).toHaveValue(storyText);
+  });
+
   it("fills and saves the fictional judge example without replacing existing work", async () => {
     const user = userEvent.setup();
     const persistence = testPersistence();
@@ -1607,5 +1689,66 @@ describe("App capture integration", () => {
     await waitFor(() => expect(editor).toHaveValue(""));
     expect(await persistence.recoverGuestDraft()).toBeNull();
     expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+  });
+
+  it("opens the private non-chronological story visualisation from authenticated capture", async () => {
+    const user = userEvent.setup();
+    const persistence = testPersistence();
+    const ownerId = crypto.randomUUID();
+    const storyId = crypto.randomUUID();
+    const listStories = vi.fn().mockResolvedValue([
+      {
+        id: storyId,
+        title: "The fictional observatory garden",
+        captured_at: "2026-07-03T08:00:00.000Z",
+        updated_at: "2026-07-04T09:00:00.000Z",
+        excerpt: "A fictional astronomer planted rosemary beside a brass telescope.",
+        total_voice_duration_ms: 92_000,
+      },
+    ]);
+    const cloud = { listStories } as unknown as CloudPersistence;
+
+    render(
+      <App
+        dependencies={{
+          persistence,
+          createCloudPersistence: () => cloud,
+          getCurrentSession: () =>
+            Promise.resolve({ user: { id: ownerId } } as Session),
+          isCloudConfigured: () => true,
+          onAuthStateChange: () => () => undefined,
+          checkCloudReadiness: () => Promise.resolve({ status: "ready" }),
+          takeAuthReturnContext: () => null,
+        }}
+      />,
+    );
+
+    const visualise = await screen.findByRole("button", {
+      name: "Visualise my stories",
+    });
+    await user.click(visualise);
+
+    expect(
+      await screen.findByRole("heading", { name: "Visualise my stories" }),
+    ).toBeVisible();
+    expect(listStories).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("textbox", { name: "Write or edit your story" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Explore The fictional observatory garden",
+      }),
+    ).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Back to your story" }),
+    );
+    expect(
+      await screen.findByRole("textbox", { name: "Write or edit your story" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Visualise my stories" }),
+    ).toHaveFocus();
   });
 });

@@ -6,8 +6,10 @@ import {
   BROWSER_RATE_LIMIT_POLICY,
   createSignedBrowserCookieValue,
   establishTranscriptionBrowserSession,
+  enforceGuidanceRateLimits,
   enforceTranscriptionRateLimits,
   evaluateRateLimitReservation,
+  GUIDANCE_BROWSER_RATE_LIMIT_POLICY,
 } from "./rate-limit";
 
 const HOUR_MS = 60 * 60 * 1_000;
@@ -111,6 +113,54 @@ describe("rolling transcription limits", () => {
       timestamps,
       DAY_MS,
       BROWSER_RATE_LIMIT_POLICY,
+    );
+    expect(boundary.allowed).toBe(true);
+  });
+});
+
+describe("rolling guidance limits", () => {
+  it("allows thirty prompts per rolling hour and expires at the boundary", () => {
+    const timestamps = Array.from(
+      { length: 30 },
+      (_, index) => index * 2 * 60_000,
+    );
+    const blocked = evaluateRateLimitReservation(
+      timestamps,
+      HOUR_MS - 1,
+      GUIDANCE_BROWSER_RATE_LIMIT_POLICY,
+    );
+    expect(blocked).toMatchObject({
+      allowed: false,
+      retryAfterSeconds: 1,
+    });
+
+    const boundary = evaluateRateLimitReservation(
+      timestamps,
+      HOUR_MS,
+      GUIDANCE_BROWSER_RATE_LIMIT_POLICY,
+    );
+    expect(boundary.allowed).toBe(true);
+  });
+
+  it("allows ninety prompts per rolling day and expires at the boundary", () => {
+    const timestamps = Array.from(
+      { length: 90 },
+      (_, index) => index * 16 * 60_000,
+    );
+    const blocked = evaluateRateLimitReservation(
+      timestamps,
+      DAY_MS - 1,
+      GUIDANCE_BROWSER_RATE_LIMIT_POLICY,
+    );
+    expect(blocked).toMatchObject({
+      allowed: false,
+      retryAfterSeconds: 1,
+    });
+
+    const boundary = evaluateRateLimitReservation(
+      timestamps,
+      DAY_MS,
+      GUIDANCE_BROWSER_RATE_LIMIT_POLICY,
     );
     expect(boundary.allowed).toBe(true);
   });
@@ -337,5 +387,26 @@ describe("transcription rate-limit Durable Objects", () => {
         chunkStartMs: 0,
       }),
     ).resolves.toMatchObject({ allowed: true });
+  });
+});
+
+describe("guidance rate-limit Durable Objects", () => {
+  it("allows thirty one-off prompts per browser per rolling hour", async () => {
+    const browserId = uniqueBrowserId(Math.floor(Math.random() * 1_000_000));
+    const request = await requestFor("203.0.113.240", browserId);
+    const decisions = [];
+    for (let index = 0; index < 31; index += 1) {
+      decisions.push(
+        await enforceGuidanceRateLimits(
+          request,
+          testEnv(),
+          crypto.randomUUID(),
+        ),
+      );
+    }
+    expect(decisions.slice(0, 30).every((decision) => decision.allowed)).toBe(
+      true,
+    );
+    expect(decisions[30]).toMatchObject({ allowed: false });
   });
 });

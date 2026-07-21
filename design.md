@@ -64,7 +64,7 @@ save status. No logo has been adopted.
 The empty canvas presents, in order:
 
 1. A short invitation and device-only privacy explanation.
-2. `Just listen`, `Guide me` and `Give me a prompt` controls.
+2. `Just listen`, `Interview me` and `Guide me with a prompt` controls.
 3. The borderless literary story editor.
 4. The recording action and quiet capture state.
 
@@ -110,6 +110,31 @@ on small screens.
 Story-library cards show only a factual title, capture date and time, verbatim
 excerpt, voice duration and `Continue`. No category, score, summary or progress
 indicator belongs in the MVP library.
+
+## Story visualisation
+
+`Visualise my stories` is a full-screen, private exploratory surface beside the
+practical story library. It uses the existing paper-and-forest palette and the
+same factual title, verbatim excerpt, date and voice-duration summaries. It does
+not introduce imagery, categories, timelines, connections or generated
+narrative.
+
+Stories move through three asymmetric horizontal lanes in a shuffled order.
+The arrangement is stable until the person selects `Shuffle stories`; placement
+and proximity have no semantic meaning. Selecting a story pauses the field and
+opens a raised editorial focus panel with `Open story`. The open action reuses
+the normal safe library path.
+
+Motion is slow, transform-only and subordinate to reading. A visible
+`Pause motion` control is always available. Hover, keyboard focus, touch and a
+focused story pause movement. Reduced motion removes marquee and entrance
+animation, hides decorative echoes from the visual flow, and preserves a static
+interactive arrangement. Story controls remain native buttons with visible
+focus, and decorative duplicates remain hidden from assistive technology.
+
+On mobile, the introduction and controls stack, story fragments use a single
+content order with large touch targets, and the page never requires motion to
+find or open a story.
 
 ## Accessibility and responsive behaviour
 

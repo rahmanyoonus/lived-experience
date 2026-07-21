@@ -12,4 +12,17 @@ if (!root) {
   throw new Error("The application root is missing.");
 }
 
-createRoot(root).render(<App />);
+const applicationRoot = createRoot(root);
+const visualisationPreviewRequested =
+  import.meta.env.DEV &&
+  new URLSearchParams(window.location.search).get("visualise-preview") === "1";
+
+if (visualisationPreviewRequested) {
+  void import("./dev/StoryVisualisationPreview").then(
+    ({ StoryVisualisationPreview }) => {
+      applicationRoot.render(<StoryVisualisationPreview />);
+    },
+  );
+} else {
+  applicationRoot.render(<App />);
+}

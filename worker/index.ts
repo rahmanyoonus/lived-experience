@@ -1,13 +1,18 @@
 import { jsonResponse } from "./http";
+import { handleGuidancePrompt } from "./guidance";
 import {
   establishTranscriptionBrowserSession,
+  enforceGuidanceRateLimits,
   enforceTranscriptionRateLimits,
+  type GuidanceRateLimitResult,
   type TranscriptionRateLimitInput,
   type TranscriptionRateLimitResult,
 } from "./rate-limit";
 import { OPENAI_TRANSCRIPTION_PROVIDER_POLICY } from "./provider-policy";
 import {
+  reconcileGuidanceSpend,
   reconcileTranscriptionSpend,
+  reserveGuidanceSpend,
   reserveTranscriptionSpend,
 } from "./spend-gate";
 import { handleTranscription, type UpstreamFetch } from "./transcription";
@@ -28,6 +33,14 @@ interface WorkerDependencies {
   readonly spendReserve?: typeof reserveTranscriptionSpend;
   readonly spendReconcile?: typeof reconcileTranscriptionSpend;
   readonly providerTimeoutMs?: number;
+  readonly guidanceProviderTimeoutMs?: number;
+  readonly guidanceRateLimitEnforcer?: (
+    request: Request,
+    env: Env,
+    requestId: string,
+  ) => Promise<GuidanceRateLimitResult>;
+  readonly guidanceSpendReserve?: typeof reserveGuidanceSpend;
+  readonly guidanceSpendReconcile?: typeof reconcileGuidanceSpend;
   readonly providerReadinessProbe?: (
     apiKey: string,
     upstreamFetch: UpstreamFetch,
@@ -169,6 +182,13 @@ export function createWorker(dependencies: WorkerDependencies = {}) {
   const spendReconcile =
     dependencies.spendReconcile ?? reconcileTranscriptionSpend;
   const providerTimeoutMs = dependencies.providerTimeoutMs;
+  const guidanceProviderTimeoutMs = dependencies.guidanceProviderTimeoutMs;
+  const guidanceRateLimitEnforcer =
+    dependencies.guidanceRateLimitEnforcer ?? enforceGuidanceRateLimits;
+  const guidanceSpendReserve =
+    dependencies.guidanceSpendReserve ?? reserveGuidanceSpend;
+  const guidanceSpendReconcile =
+    dependencies.guidanceSpendReconcile ?? reconcileGuidanceSpend;
   const providerReadinessProbe =
     dependencies.providerReadinessProbe ?? probeTranscriptionProvider;
 
@@ -251,6 +271,31 @@ export function createWorker(dependencies: WorkerDependencies = {}) {
         );
       }
 
+      if (url.pathname === "/api/prompts") {
+        if (request.method !== "POST") {
+          return jsonResponse(
+            { code: "METHOD_NOT_ALLOWED", message: "Method not allowed." },
+            { status: 405, headers: { Allow: "POST" } },
+          );
+        }
+        if (isCrossOriginBrowserPost(request, url)) {
+          return forbiddenResponse();
+        }
+        return handleGuidancePrompt(
+          request,
+          env.OPENAI_API_KEY,
+          upstreamFetch,
+          (requestId) =>
+            guidanceRateLimitEnforcer(request, env, requestId),
+          {
+            reserve: () => guidanceSpendReserve(env),
+            reconcile: (reservationId, body) =>
+              guidanceSpendReconcile(env, reservationId, body),
+          },
+          guidanceProviderTimeoutMs,
+        );
+      }
+
       if (url.pathname === "/api/transcriptions") {
         if (request.method !== "POST") {
           return jsonResponse(
@@ -317,7 +362,10 @@ export function createWorker(dependencies: WorkerDependencies = {}) {
         return withBrowserCookie(response, rateLimitResult?.setCookie);
       }
 
-      if (url.pathname === "/api/transcription-session") {
+      if (
+        url.pathname === "/api/browser-session" ||
+        url.pathname === "/api/transcription-session"
+      ) {
         if (request.method !== "POST") {
           return jsonResponse(
             { code: "METHOD_NOT_ALLOWED", message: "Method not allowed." },

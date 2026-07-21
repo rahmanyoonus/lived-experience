@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Session } from "@supabase/supabase-js";
 
 import { insertTranscript, mapTextPosition } from "./app/textInsertion";
@@ -9,6 +17,7 @@ import {
   type CapturePhase,
   type CaptureReadinessNotice,
   type EditorSelection,
+  type GuidancePromptState,
   type MicrophoneDialogKind,
   type MagicLinkRequestResult,
   type PersistenceState,
@@ -19,6 +28,14 @@ import {
   type StoryTranscriptUncertainty,
   type StoryVersionArtefact,
 } from "./components";
+
+type StorySurface = "library" | "visualisation" | null;
+
+const StoryVisualisation = lazy(() =>
+  import("./components/StoryVisualisation").then((module) => ({
+    default: module.StoryVisualisation,
+  })),
+);
 import {
   createGuestPersistence,
   type AudioSegmentRecord,
@@ -44,6 +61,11 @@ import {
   type CloudPersistence,
   type CloudOpenedStory,
 } from "./services/cloudPersistence";
+import {
+  generateStoryPrompt,
+  type PromptGenerationRequest,
+  type PromptGenerationResult,
+} from "./services/promptGeneration";
 import {
   ChunkedAudioRecorder,
   type ChunkedRecorderOptions,
@@ -82,6 +104,9 @@ export interface AppDependencies {
   readonly transcribe?: (
     request: TranscriptionRequest,
   ) => Promise<TranscriptionResult>;
+  readonly generatePrompt?: (
+    request: PromptGenerationRequest,
+  ) => Promise<PromptGenerationResult>;
   readonly isCloudConfigured?: () => boolean;
   readonly getCurrentSession?: typeof getCurrentSession;
   readonly onAuthStateChange?: typeof onAuthStateChange;
@@ -395,6 +420,10 @@ export function App({ dependencies = {} }: AppProps) {
     () => dependencies.transcribe ?? transcribeRecording,
     [dependencies.transcribe],
   );
+  const generatePrompt = useMemo(
+    () => dependencies.generatePrompt ?? generateStoryPrompt,
+    [dependencies.generatePrompt],
+  );
 
   const [content, setContent] = useState("");
   const [phase, setPhase] = useState<CapturePhase>("empty");
@@ -409,6 +438,8 @@ export function App({ dependencies = {} }: AppProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [recordingDurationSeconds, setRecordingDurationSeconds] = useState(0);
   const [captureMessage, setCaptureMessage] = useState<string | null>(null);
+  const [guidancePromptState, setGuidancePromptState] =
+    useState<GuidancePromptState>({ status: "idle" });
   const [deviceReadiness, setDeviceReadiness] =
     useState<DeviceReadiness | null>(null);
   const [cloudReadiness, setCloudReadiness] =
@@ -429,7 +460,7 @@ export function App({ dependencies = {} }: AppProps) {
   const [canKeepPendingAudio, setCanKeepPendingAudio] = useState(false);
   const [hasEmergencyAudioBackup, setHasEmergencyAudioBackup] =
     useState(false);
-  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [storySurface, setStorySurface] = useState<StorySurface>(null);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [libraryItems, setLibraryItems] = useState<readonly StoryLibraryItem[]>(
@@ -450,6 +481,10 @@ export function App({ dependencies = {} }: AppProps) {
     useState<CloudStoryEditConflictError | null>(null);
 
   const contentRef = useRef(content);
+  const restoreVisualisationFocusRef = useRef(false);
+  const lastGuidancePromptRef = useRef<string | null>(null);
+  const guidancePromptAbortRef = useRef<AbortController | null>(null);
+  const guidancePromptRequestRef = useRef(0);
   const currentStoryIdRef = useRef<Uuid | null>(null);
   const recorderRef = useRef<Recorder | null>(null);
   const activeSegmentIdRef = useRef<Uuid | null>(null);
@@ -494,6 +529,26 @@ export function App({ dependencies = {} }: AppProps) {
   );
   const uncertaintyPlayerRef = useRef<HTMLAudioElement | null>(null);
 
+  const updateGuidancePromptState = useCallback(
+    (next: GuidancePromptState) => {
+      setGuidancePromptState(next);
+    },
+    [],
+  );
+
+  const cancelGuidancePrompt = useCallback(
+    (forgetPrevious = false) => {
+      guidancePromptRequestRef.current += 1;
+      guidancePromptAbortRef.current?.abort();
+      guidancePromptAbortRef.current = null;
+      if (forgetPrevious) {
+        lastGuidancePromptRef.current = null;
+      }
+      updateGuidancePromptState({ status: "idle" });
+    },
+    [updateGuidancePromptState],
+  );
+
   const clearArtefactMedia = useCallback(() => {
     uncertaintyPlayerRef.current?.pause();
     uncertaintyPlayerRef.current = null;
@@ -507,6 +562,7 @@ export function App({ dependencies = {} }: AppProps) {
 
   const resetForFreshCanvas = useCallback(
     (preserveInMemoryContent = false) => {
+      cancelGuidancePrompt(true);
       clearArtefactMedia();
       const nextContent = preserveInMemoryContent ? contentRef.current : "";
       if (!preserveInMemoryContent) {
@@ -546,10 +602,10 @@ export function App({ dependencies = {} }: AppProps) {
       setEmailDialogOpen(false);
       setDiscardDraftDialogOpen(false);
       setIsRecoveredGuestDraft(false);
-      setLibraryOpen(false);
+      setStorySurface(null);
       setArtefactsMode(null);
     },
-    [clearArtefactMedia],
+    [cancelGuidancePrompt, clearArtefactMedia],
   );
 
   const setRecoveredDraft = useCallback((recovered: RecoveredGuestDraft) => {
@@ -589,6 +645,20 @@ export function App({ dependencies = {} }: AppProps) {
   }, []);
 
   useEffect(() => () => clearArtefactMedia(), [clearArtefactMedia]);
+  useEffect(
+    () => () => guidancePromptAbortRef.current?.abort(),
+    [],
+  );
+
+  useEffect(() => {
+    if (storySurface !== null || !restoreVisualisationFocusRef.current) {
+      return;
+    }
+    restoreVisualisationFocusRef.current = false;
+    document
+      .querySelector<HTMLButtonElement>("[data-visualise-stories-trigger]")
+      ?.focus();
+  }, [storySurface]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1165,6 +1235,63 @@ export function App({ dependencies = {} }: AppProps) {
     [],
   );
 
+  const requestGuidancePrompt = useCallback(async (): Promise<void> => {
+    if (
+      phase === "recording" ||
+      phase === "processing" ||
+      deviceReadiness?.status === "blocked"
+    ) {
+      return;
+    }
+    guidancePromptAbortRef.current?.abort();
+    const controller = new AbortController();
+    guidancePromptAbortRef.current = controller;
+    const requestGeneration = guidancePromptRequestRef.current + 1;
+    guidancePromptRequestRef.current = requestGeneration;
+    const previousPrompt = lastGuidancePromptRef.current;
+    updateGuidancePromptState({ status: "loading" });
+    try {
+      const result = await generatePrompt({
+        storyText: contentRef.current,
+        previousPrompt,
+        signal: controller.signal,
+      });
+      if (
+        controller.signal.aborted ||
+        requestGeneration !== guidancePromptRequestRef.current
+      ) {
+        return;
+      }
+      lastGuidancePromptRef.current = result.prompt;
+      updateGuidancePromptState({
+        status: "ready",
+        prompt: result.prompt,
+      });
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        requestGeneration !== guidancePromptRequestRef.current ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        return;
+      }
+      updateGuidancePromptState({
+        status: "error",
+        message:
+          "A prompt isn’t available right now. Your story is unchanged.",
+      });
+    } finally {
+      if (guidancePromptAbortRef.current === controller) {
+        guidancePromptAbortRef.current = null;
+      }
+    }
+  }, [
+    deviceReadiness?.status,
+    generatePrompt,
+    phase,
+    updateGuidancePromptState,
+  ]);
+
   const prepareTranscript = useCallback(
     async (
       pending: PendingSegment,
@@ -1464,6 +1591,7 @@ export function App({ dependencies = {} }: AppProps) {
       return;
     }
 
+    cancelGuidancePrompt();
     setMicrophoneDialog(null);
     setCaptureMessage(null);
     const latestDeviceReadiness = await probeDeviceReadiness(persistence);
@@ -1592,6 +1720,7 @@ export function App({ dependencies = {} }: AppProps) {
     }
   }, [
     createRecorder,
+    cancelGuidancePrompt,
     flushTextSave,
     persistence,
     phase,
@@ -1933,15 +2062,26 @@ export function App({ dependencies = {} }: AppProps) {
   }, [cloudConfigured, createCloudPersistence, session]);
 
   const handleOpenStoryLibrary = useCallback(() => {
-    setLibraryOpen(true);
+    setStorySurface("library");
     void loadStoryLibrary();
   }, [loadStoryLibrary]);
+
+  const handleOpenStoryVisualisation = useCallback(() => {
+    setStorySurface("visualisation");
+    void loadStoryLibrary();
+  }, [loadStoryLibrary]);
+
+  const handleDismissStoryVisualisation = useCallback(() => {
+    restoreVisualisationFocusRef.current = true;
+    setStorySurface(null);
+  }, []);
 
   const handleOpenCloudStory = useCallback(
     async (storyId: string): Promise<void> => {
       if (!session) {
         return;
       }
+      cancelGuidancePrompt(true);
       setLibraryLoading(true);
       setLibraryError(null);
       try {
@@ -2012,7 +2152,7 @@ export function App({ dependencies = {} }: AppProps) {
         storyEditConflictRef.current = null;
         setStoryEditConflict(null);
         setCaptureMessage(null);
-        setLibraryOpen(false);
+        setStorySurface(null);
       } catch {
         setLibraryError(
           "This story could not be opened yet. Your current work is unchanged.",
@@ -2022,6 +2162,7 @@ export function App({ dependencies = {} }: AppProps) {
       }
     },
     [
+      cancelGuidancePrompt,
       createCloudPersistence,
       flushTextSave,
       persistence,
@@ -2558,7 +2699,8 @@ export function App({ dependencies = {} }: AppProps) {
 
   return (
     <>
-      <CaptureCanvas
+      {storySurface !== "visualisation" ? (
+        <CaptureCanvas
         captureMessage={captureMessage}
         captureDisabled={captureDisabled}
         content={content}
@@ -2570,6 +2712,7 @@ export function App({ dependencies = {} }: AppProps) {
         hasPendingRecording={hasPendingSegment}
         hasStarted={hasStarted}
         hasVersionHistory={hasVersionHistory}
+        guidancePromptState={guidancePromptState}
         isAuthenticated={session !== null}
         microphoneDialog={microphoneDialog}
         microphoneWarning={microphoneWarning}
@@ -2589,6 +2732,7 @@ export function App({ dependencies = {} }: AppProps) {
         }
         onDismissEmailDialog={() => setEmailDialogOpen(false)}
         onDismissMicrophone={() => setMicrophoneDialog(null)}
+        onDismissPrompt={() => cancelGuidancePrompt()}
         onEditorSelectionChange={handleEditorSelectionChange}
         onKeepStory={() => setEmailDialogOpen(true)}
         onOpenOriginalAudio={() => void loadStoryArtefacts("audio")}
@@ -2603,11 +2747,20 @@ export function App({ dependencies = {} }: AppProps) {
             ? handleOpenStoryLibrary
             : undefined
         }
+        onOpenStoryVisualisation={
+          session &&
+          phase !== "recording" &&
+          phase !== "processing" &&
+          !hasPendingSegment
+            ? handleOpenStoryVisualisation
+            : undefined
+        }
         onOpenVersionHistory={
           storyEditConflict
             ? () => void handleReviewConflictVersions()
             : () => void loadStoryArtefacts("versions")
         }
+        onRequestPrompt={() => void requestGuidancePrompt()}
         onRetryCapture={
           hasPendingSegment && pendingTranscriptRetryable
             ? () => void retryPendingTranscript()
@@ -2666,16 +2819,37 @@ export function App({ dependencies = {} }: AppProps) {
           hasEmergencyAudioBackup ||
           storyEditConflict !== null
         }
-      />
-      {libraryOpen ? (
+        />
+      ) : null}
+      {storySurface === "library" ? (
         <StoryLibraryDialog
           error={libraryError}
           items={libraryItems}
           loading={libraryLoading}
-          onDismiss={() => setLibraryOpen(false)}
+          onDismiss={() => setStorySurface(null)}
           onOpen={(storyId) => void handleOpenCloudStory(storyId)}
           onRetry={() => void loadStoryLibrary()}
         />
+      ) : null}
+      {storySurface === "visualisation" ? (
+        <Suspense
+          fallback={
+            <main className="capture-layout">
+              <p aria-live="polite" role="status">
+                Opening your story visualisation…
+              </p>
+            </main>
+          }
+        >
+          <StoryVisualisation
+            error={libraryError}
+            items={libraryItems}
+            loading={libraryLoading}
+            onDismiss={handleDismissStoryVisualisation}
+            onOpen={(storyId) => void handleOpenCloudStory(storyId)}
+            onRetry={() => void loadStoryLibrary()}
+          />
+        </Suspense>
       ) : null}
       {artefactsMode ? (
         <StoryArtefactsDialog

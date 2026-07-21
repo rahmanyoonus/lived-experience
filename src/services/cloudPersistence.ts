@@ -1246,18 +1246,42 @@ class SupabaseCloudPersistence implements CloudPersistence {
       audio_sha256: audioSha256,
     };
 
-    const { error: uploadError } = await bucket.upload(path, audio, {
-      cacheControl: "31536000",
-      contentType: mediaType,
-      metadata,
-      upsert: false,
-    });
-    if (!uploadError) {
-      return;
-    }
-    console.warn(
-      `[lived-experience] storage-upload:${contentFreeStorageErrorCode(uploadError)}`,
-    );
+    const requireMatchingObject = async (): Promise<void> => {
+      const { data: existingInfo, error: infoError } = await bucket.info(path);
+      if (infoError) {
+        console.warn(
+          `[lived-experience] storage-info:${contentFreeStorageErrorCode(infoError)}`,
+        );
+        fail(
+          isAuthenticationError(infoError)
+            ? "AUTH_REQUIRED"
+            : "AUDIO_UPLOAD_FAILED",
+        );
+      }
+
+      const storedMetadata: unknown = existingInfo.metadata;
+      if (!isRecord(storedMetadata)) {
+        fail("AUDIO_CONFLICT");
+      }
+      const storedClientSegmentId =
+        storedMetadata.clientSegmentId ?? storedMetadata.client_segment_id;
+      const storedAudioPartId =
+        storedMetadata.audioPartId ?? storedMetadata.audio_part_id;
+      const storedPartNumber =
+        storedMetadata.partNumber ?? storedMetadata.part_number;
+      const storedSha256 =
+        storedMetadata.audioSha256 ?? storedMetadata.audio_sha256;
+      if (
+        existingInfo.size !== audio.size ||
+        existingInfo.contentType !== mediaType ||
+        storedClientSegmentId !== clientSegmentId ||
+        storedAudioPartId !== audioPartId ||
+        storedPartNumber !== String(partNumber) ||
+        storedSha256 !== audioSha256
+      ) {
+        fail("AUDIO_CONFLICT");
+      }
+    };
 
     const prefix = `${ownerId}/${storyId}/${clientSegmentId}`;
     const fileName = path.slice(prefix.length + 1);
@@ -1271,32 +1295,30 @@ class SupabaseCloudPersistence implements CloudPersistence {
       console.warn(
         `[lived-experience] storage-list:${contentFreeStorageErrorCode(listError)}`,
       );
-      fail(
-        isAuthenticationError(uploadError) || isAuthenticationError(listError)
-          ? "AUTH_REQUIRED"
-          : "AUDIO_UPLOAD_FAILED",
-      );
+      if (isAuthenticationError(listError)) {
+        fail("AUTH_REQUIRED");
+      }
+    } else if (files?.some((file) => file.name === fileName)) {
+      await requireMatchingObject();
+      return;
     }
 
-    const existing = files?.find((file) => file.name === fileName);
-    const storedMetadata: unknown = existing?.metadata;
-    if (!isRecord(storedMetadata)) {
-      fail("AUDIO_UPLOAD_FAILED");
+    const { error: uploadError } = await bucket.upload(path, audio, {
+      cacheControl: "31536000",
+      contentType: mediaType,
+      metadata,
+      upsert: false,
+    });
+    if (!uploadError) {
+      return;
     }
-    const storedSize = storedMetadata.size;
-    const storedClientSegmentId = storedMetadata.client_segment_id;
-    const storedAudioPartId = storedMetadata.audio_part_id;
-    const storedPartNumber = storedMetadata.part_number;
-    const storedSha256 = storedMetadata.audio_sha256;
-    if (
-      storedSize !== audio.size ||
-      storedClientSegmentId !== clientSegmentId ||
-      storedAudioPartId !== audioPartId ||
-      storedPartNumber !== String(partNumber) ||
-      storedSha256 !== audioSha256
-    ) {
-      fail("AUDIO_CONFLICT");
+    console.warn(
+      `[lived-experience] storage-upload:${contentFreeStorageErrorCode(uploadError)}`,
+    );
+    if (isAuthenticationError(uploadError)) {
+      fail("AUTH_REQUIRED");
     }
+    await requireMatchingObject();
   }
 
   async uploadFinalisedAudio(
