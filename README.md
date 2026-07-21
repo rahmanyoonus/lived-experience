@@ -107,6 +107,10 @@ Evidence is preserved in the repository history from the initial commit
 - The story visualisation is private presentation only; it does not infer
   themes, timelines, or relationships.
 
+## Licence
+
+This project is available under the [MIT License](./LICENSE).
+
 The first local vertical slice is implemented. Guest typing, chunked recording,
 device recovery, post-recording transcription review, immutable originals,
 version restoration, passwordless email continuation, cloud synchronisation, and the
