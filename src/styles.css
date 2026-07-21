@@ -237,6 +237,7 @@ button:disabled {
 
 .site-navigation {
   display: flex;
+  flex: 1 1 auto;
   gap: var(--space-4);
   align-items: stretch;
   align-self: stretch;
@@ -292,6 +293,7 @@ button.navigation-tab:hover:not(:disabled) {
   justify-content: center;
   flex: 0 0 auto;
   min-height: 40px;
+  margin-left: auto;
   padding: 6px 12px;
   color: var(--accent);
   font-size: 0.8125rem;
